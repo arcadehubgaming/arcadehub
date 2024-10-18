@@ -1,0 +1,87 @@
+@import url("popup.css");
+
+:root {
+    --bg-color: #ffffff;
+    --text-color: #333333;
+    --header-bg-color: rgb(232, 234, 241);
+    --header-text-color: #000000;
+    --button-bg-color: #4758b5;
+    --button-hover-bg-color: #354287;
+    --toggle-bg-color: #96929e;
+    --toggle-active-bg-color: #354287;
+    --settings-bg-color: rgb(232, 234, 241);
+}
+
+.arcadehub-dark {
+    --bg-color: #282828;
+    --text-color: #ffffff;
+    --header-bg-color: #333335;
+    --header-text-color: #ffffff;
+    --button-bg-color: #354287;
+    --button-hover-bg-color: #4758b5;
+    --toggle-bg-color: #666666;
+    --toggle-active-bg-color: #4758b5;
+    --settings-bg-color: rgb(50, 50, 50);
+}
+
+html, body {
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    font-family: Inter, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+@font-face {
+    font-display: swap;
+    font-family: Inter;
+    font-style: normal;
+    font-weight: 400;
+    src: url(../fonts/Inter-Regular.woff2) format("woff2");
+}
+
+@font-face {
+    font-display: swap;
+    font-family: Inter;
+    font-style: normal;
+    font-weight: 500;
+    src: url(../fonts/Inter-Medium.woff2) format("woff2");
+}
+
+@font-face {
+    font-display: swap;
+    font-family: Inter;
+    font-style: normal;
+    font-weight: 600;
+    src: url(../fonts/Inter-SemiBold.woff2) format("woff2");
+}
+
+@font-face {
+    font-display: swap;
+    font-family: Inter;
+    font-style: normal;
+    font-weight: 700;
+    src: url(../fonts/Inter-Bold.woff2) format("woff2");
+}
+
+a {
+    color: inherit !important;
+}
+
+.btn {
+    font-weight: 500;
+    outline-color: transparent;
+    background-color: var(--button-bg-color);
+    padding: 16px 24px;
+    color: #ffffff;
+    border-radius: 1rem;
+    display: inline-block;
+    box-shadow: 1px 2px 2px rgba(17, 24, 39, .3);
+    transition: background-color .15s;
+}
+
+.btn:hover {
+    background-color: var(--button-hover-bg-color);
+    cursor: pointer;
+}
