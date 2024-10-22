@@ -1,38 +1,77 @@
 @import url("popup.css");
+@import url("homepage.css");
+@import url("games.css");
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+
 
 :root {
-    --bg-color: #ffffff;
-    --text-color: #333333;
-    --header-bg-color: rgb(232, 234, 241);
-    --header-text-color: #000000;
+    --bg-color: #fafafa;
+    --secondary-bg-color: #eff1f5;
+    --text-color: #000000;
+    --overlay: rgba(0, 0, 0, 0.1);
+    --overlay-dark: rgba(0, 0, 0, 0.15);
     --button-bg-color: #4758b5;
     --button-hover-bg-color: #354287;
-    --toggle-bg-color: #96929e;
-    --toggle-active-bg-color: #354287;
-    --settings-bg-color: rgb(232, 234, 241);
+    --shadow: 1px 2px 2px rgba(17, 24, 39, .15);
 }
 
 .arcadehub-dark {
-    --bg-color: #282828;
+    --bg-color: #303031;
+    --secondary-bg-color: #37373a;
     --text-color: #ffffff;
-    --header-bg-color: #333335;
-    --header-text-color: #ffffff;
+    --overlay: rgba(255, 255, 255, 0.1);
+    --overlay-dark: rgba(255, 255, 255, 0.15);
     --button-bg-color: #354287;
     --button-hover-bg-color: #4758b5;
-    --toggle-bg-color: #666666;
-    --toggle-active-bg-color: #4758b5;
-    --settings-bg-color: rgb(50, 50, 50);
+    --shadow: 1px 2px 2px rgba(17, 24, 39, .3);
+}
+
+.arcadehub-fall {
+    --bg-color: #f5ddbe;
+    --secondary-bg-color: #f28e47;
+    --button-bg-color: #a75843;
+    --button-hover-bg-color: #bb6333;
+}
+
+.arcadehub-winter {
+    --bg-color: #c5ecfb;
+    --secondary-bg-color: #1e6d02;
+    --button-bg-color: #c92118;
+    --button-hover-bg-color: #e22017;
+    --text-color: #ffffff;
+}
+
+.snowflake {
+    position: absolute;
+    top: -10px; /* Start above the viewport */
+    color: #ffffff;
+    pointer-events: none; /* Prevent mouse events on snowflakes */
 }
 
 html, body {
-    min-height: 100vh;
+    width: 100%;
+    height: 100%;
     margin: 0;
     padding: 0;
     font-family: Inter, sans-serif;
-    background: var(--bg-color);
     color: var(--text-color);
 }
 
+body {
+    height: 100%;
+    background-color: var(--bg-color)
+}
+.arcadehub-dark {
+    background-color: var(--bg-color)
+}
+.arcadehub-fall {
+    background-color: var(--bg-color)
+}
+.arcadehub-winter {
+    background-color: var(--bg-color)
+}
 @font-face {
     font-display: swap;
     font-family: Inter;
@@ -77,11 +116,72 @@ a {
     color: #ffffff;
     border-radius: 1rem;
     display: inline-block;
-    box-shadow: 1px 2px 2px rgba(17, 24, 39, .3);
+    box-shadow: var(--shadow);
     transition: background-color .15s;
 }
 
 .btn:hover {
     background-color: var(--button-hover-bg-color);
     cursor: pointer;
+}
+
+.toggle {
+    position: relative;
+    height: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 50px;
+    background-color: var(--secondary-bg-color);
+    transition: .2s;
+    border-radius: 14px;
+    box-shadow: rgba(0, 0, 0, 0.2) 0px 2px 5px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: -2px;
+    bottom: -4px;
+    background-color: white;
+    border-radius: 50%;
+    transition: .2s;
+    box-shadow: rgba(0, 0, 0, 0.2) 0px 2px 5px;
+}
+
+input:checked + .slider {
+    background-color: var(--button-hover-bg-color);
+}
+
+input:checked + .slider:before {
+    transform: translateX(28px);
+}
+
+.toggle-label {
+    margin-left: 35px; 
+    font-weight: 500; 
+    color: var(--text-color);
+}
+
+
+.settings {
+    display: none
+}
+
+.arcadehub-winter .toggle-label {
+    color: black;
+}
+
+input:disabled ~ .toggle-label {
+    color: #777;
 }

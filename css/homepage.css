@@ -1,0 +1,75 @@
+.site-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    padding: 16px;
+}
+
+.topbar-container {
+    display: flex;
+    width: 100%;
+}
+
+.topbar {
+    background: var(--secondary-bg-color);
+    backdrop-filter: blur(3px);
+    border-radius: 1em;
+    padding: 0 0;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    flex-direction: row;
+    width: 100%;
+    gap: 2em;
+    font-family: "Poppins", sans-serif;
+    transition: padding 0.2s;
+    box-shadow: var(--shadow);
+}
+
+.topbar .sidebar-toggle {
+    display: flex;
+    gap: 0.5rem;
+    cursor: pointer;
+    align-items: center;
+    height: 100%;
+    padding: 8px 16px;
+    border-radius: 1em;
+    transition: background 0.3s, padding 0.3s;
+}
+
+.topbar .sidebar-toggle:hover {
+    background: var(--overlay);
+}
+
+.topbar .sidebar-toggle-selected {
+    background: var(--overlay-dark);
+}
+
+.logo {
+    font-size: 1.5em;
+}
+
+.search-input {
+    background: var(--overlay);
+    outline: none;
+    border: none;
+    border-radius: 1em;
+    margin: 0;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 1.25rem;
+    padding-right: 0.25rem;
+    flex-grow: 4;
+    color: var(--text-color);
+    transition: background 0.3s, padding 0.3s;
+    font-family: "Poppins", sans-serif;
+    font-size: 1em;
+}
+
+.search-input:focus {
+    background: var(--overlay-dark);
+}
+
+.search-input::placeholder {
+    color: var(--text-color);
+}

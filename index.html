@@ -6,10 +6,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/popup.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
-<body class="arcadehub-dark">
-    hihihih
-    <div class="btn">hi</div>
+<body>
+    <div class="site-container">
+        <header class="topbar-container">
+            <div class="topbar">
+                <div class="logo">Arcade Hub</div>
+                <div class="sidebar-toggle sidebar-toggle-selected">
+                    <i class="fas fa-gamepad"></i>
+                    Games
+                </div>
+                <div class="sidebar-toggle">
+                    <i class="fas fa-film"></i>
+                    Movies
+                </div>
+                <div class="sidebar-toggle">
+                    <i class="fas fa-user"></i>
+                    Proxies
+                </div>
+                <div class="sidebar-toggle">
+                    <i class="fas fa-gear"></i>
+                    Settings
+                </div>
+                <input class="search-input" placeholder="Search">
+            </div>
+        </header>
+        <br/>
+        <main class="body">
+            <div class="games item-list">
+            </div>
+            <div class="movies item-list">
+
+            </div>
+            <div class="proxies item-list">
+
+            </div>
+            <div class="settings item-list">
+                <label class="toggle">
+                    <input type="checkbox" id="dark-mode-toggle">
+                    <span class="slider"></span>
+                    <span class="toggle-label">Dark Mode</span>
+                </label>
+
+                <label class="toggle">
+                    <input type="checkbox" id="seasonal-mode-toggle">
+                    <span class="slider"></span>
+                    <span class="toggle-label">Seasonal Mode</span>
+                </label>
+
+                <label class="toggle">
+                    <input type="checkbox" id="snow-toggle">
+                    <span class="slider"></span>
+                    <span class="toggle-label">Enable Snow</span>
+                </label>
+            </div>
+            
+        </div>
+    </div>
+    <div id="snowTarget" style="background:transparent; color:transparent; height: 1px; width: 100%"></div>
+
+    <script>var ArcadeHubItems = {};</script> 
+    <script src="js/items/games.js"></script>
+    <script src="js/items/movies.js"></script>
+    <script src="js/items/proxies.js"></script>
     <script src="js/common.js"></script>
 </body>
 </html>

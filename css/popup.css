@@ -12,7 +12,7 @@
 }
 
 .popup {
-    background: var(--header-bg-color);
+    background: var(--secondary-bg-color);
     color: var(--text-color);
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
@@ -47,11 +47,11 @@
 }
 
 .popup-close-btn {
-    color: #4758b5;
+    color: var(--button-bg-color);
     cursor: pointer;
     font-weight: 600;
 }
 
 .popup-close-btn:hover {
-    color: #354287;
+    color: var(--button-hover-bg-color);
 }
