@@ -228,6 +228,10 @@ ArcadeHubItems.Games = [
         "url": "games/geodash 2/index.html"
     },
     {
+        "name": "Getaway Shootout",
+        "url": "games/getaway shootout/index.html"
+    },
+    {
         "name": "Google Kitsune",
         "url": "games/google-kitsune/index.html"
     },
