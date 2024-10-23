@@ -27209,4 +27209,10095 @@ cr.behaviors.Bullet = function(runtime)
 		this.lastx = o["lx"];
 		this.lasty = o["ly"];
 		this.lastKnownAngle = o["lka"];
-		thi
+		this.travelled = o["t"];
+		this.enabled = o["e"];
+	};
+	behinstProto.tick = function ()
+	{
+		if (!this.enabled)
+			return;
+		var dt = this.runtime.getDt(this.inst);
+		var s, a;
+		var bounceSolid, bounceAngle;
+		if (this.inst.angle !== this.lastKnownAngle)
+		{
+			if (this.setAngle)
+			{
+				s = cr.distanceTo(0, 0, this.dx, this.dy);
+				this.dx = Math.cos(this.inst.angle) * s;
+				this.dy = Math.sin(this.inst.angle) * s;
+			}
+			this.lastKnownAngle = this.inst.angle;
+		}
+		if (this.acc !== 0)
+		{
+			s = cr.distanceTo(0, 0, this.dx, this.dy);
+			if (this.dx === 0 && this.dy === 0)
+				a = this.inst.angle;
+			else
+				a = cr.angleTo(0, 0, this.dx, this.dy);
+			s += this.acc * dt;
+			if (s < 0)
+				s = 0;
+			this.dx = Math.cos(a) * s;
+			this.dy = Math.sin(a) * s;
+		}
+		if (this.g !== 0)
+			this.dy += this.g * dt;
+		this.lastx = this.inst.x;
+		this.lasty = this.inst.y;
+		if (this.dx !== 0 || this.dy !== 0)
+		{
+			this.inst.x += this.dx * dt;
+			this.inst.y += this.dy * dt;
+			this.travelled += cr.distanceTo(0, 0, this.dx * dt, this.dy * dt)
+			if (this.setAngle)
+			{
+				this.inst.angle = cr.angleTo(0, 0, this.dx, this.dy);
+				this.inst.set_bbox_changed();
+				this.lastKnownAngle = this.inst.angle;
+			}
+			this.inst.set_bbox_changed();
+			if (this.bounceOffSolid)
+			{
+				bounceSolid = this.runtime.testOverlapSolid(this.inst);
+				if (bounceSolid)
+				{
+					this.runtime.registerCollision(this.inst, bounceSolid);
+					s = cr.distanceTo(0, 0, this.dx, this.dy);
+					bounceAngle = this.runtime.calculateSolidBounceAngle(this.inst, this.lastx, this.lasty);
+					this.dx = Math.cos(bounceAngle) * s;
+					this.dy = Math.sin(bounceAngle) * s;
+					this.inst.x += this.dx * dt;			// move out for one tick since the object can't have spent a tick in the solid
+					this.inst.y += this.dy * dt;
+					this.inst.set_bbox_changed();
+					if (this.setAngle)
+					{
+						this.inst.angle = bounceAngle;
+						this.lastKnownAngle = bounceAngle;
+						this.inst.set_bbox_changed();
+					}
+					if (!this.runtime.pushOutSolid(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30)))
+						this.runtime.pushOutSolidNearest(this.inst, 100);
+				}
+			}
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.CompareSpeed = function (cmp, s)
+	{
+		return cr.do_cmp(cr.distanceTo(0, 0, this.dx, this.dy), cmp, s);
+	};
+	Cnds.prototype.CompareTravelled = function (cmp, d)
+	{
+		return cr.do_cmp(this.travelled, cmp, d);
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetSpeed = function (s)
+	{
+		var a = cr.angleTo(0, 0, this.dx, this.dy);
+		this.dx = Math.cos(a) * s;
+		this.dy = Math.sin(a) * s;
+	};
+	Acts.prototype.SetAcceleration = function (a)
+	{
+		this.acc = a;
+	};
+	Acts.prototype.SetGravity = function (g)
+	{
+		this.g = g;
+	};
+	Acts.prototype.SetAngleOfMotion = function (a)
+	{
+		a = cr.to_radians(a);
+		var s = cr.distanceTo(0, 0, this.dx, this.dy)
+		this.dx = Math.cos(a) * s;
+		this.dy = Math.sin(a) * s;
+	};
+	Acts.prototype.Bounce = function (objtype)
+	{
+		if (!objtype)
+			return;
+		var otherinst = objtype.getFirstPicked(this.inst);
+		if (!otherinst)
+			return;
+		var dt = this.runtime.getDt(this.inst);
+		var s = cr.distanceTo(0, 0, this.dx, this.dy);
+		var bounceAngle = this.runtime.calculateSolidBounceAngle(this.inst, this.lastx, this.lasty, otherinst);
+		this.dx = Math.cos(bounceAngle) * s;
+		this.dy = Math.sin(bounceAngle) * s;
+		this.inst.x += this.dx * dt;			// move out for one tick since the object can't have spent a tick in the solid
+		this.inst.y += this.dy * dt;
+		this.inst.set_bbox_changed();
+		if (this.setAngle)
+		{
+			this.inst.angle = bounceAngle;
+			this.lastKnownAngle = bounceAngle;
+			this.inst.set_bbox_changed();
+		}
+		if (this.bounceOffSolid)
+		{
+			if (!this.runtime.pushOutSolid(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30)))
+				this.runtime.pushOutSolidNearest(this.inst, 100);
+		}
+		else if (s !== 0)
+		{
+			this.runtime.pushOut(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30), otherinst)
+		}
+	};
+	Acts.prototype.SetDistanceTravelled = function (d)
+	{
+		this.travelled = d;
+	};
+	Acts.prototype.SetEnabled = function (en)
+	{
+		this.enabled = (en === 1);
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.Speed = function (ret)
+	{
+		var s = cr.distanceTo(0, 0, this.dx, this.dy);
+		s = cr.round6dp(s);
+		ret.set_float(s);
+	};
+	Exps.prototype.Acceleration = function (ret)
+	{
+		ret.set_float(this.acc);
+	};
+	Exps.prototype.AngleOfMotion = function (ret)
+	{
+		ret.set_float(cr.to_degrees(cr.angleTo(0, 0, this.dx, this.dy)));
+	};
+	Exps.prototype.DistanceTravelled = function (ret)
+	{
+		ret.set_float(this.travelled);
+	};
+	Exps.prototype.Gravity = function (ret)
+	{
+		ret.set_float(this.g);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Car = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Car.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.upkey = false;
+		this.downkey = false;
+		this.leftkey = false;
+		this.rightkey = false;
+		this.ignoreInput = false;
+		this.simup = false;
+		this.simdown = false;
+		this.simleft = false;
+		this.simright = false;
+		this.s = 0;
+		this.a = this.inst.angle;
+		this.m = this.inst.angle;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.maxspeed = this.properties[0];
+		this.acc = this.properties[1];
+		this.dec = this.properties[2];
+		this.steerSpeed = cr.to_radians(this.properties[3]);
+		this.driftRecover = cr.to_radians(this.properties[4]);
+		this.friction = this.properties[5];
+		this.setAngle = (this.properties[6] === 1);			// 0=no, 1=yes
+		this.defaultControls = (this.properties[7] === 1);	// 0=no, 1=yes
+		this.enabled = (this.properties[8] !== 0);
+		this.lastx = this.inst.x;
+		this.lasty = this.inst.y;
+		this.lastAngle = this.inst.angle;
+		if (this.defaultControls && !this.runtime.isDomFree)
+		{
+			jQuery(document).keydown(
+				(function (self) {
+					return function(info) {
+						self.onKeyDown(info);
+					};
+				})(this)
+			);
+			jQuery(document).keyup(
+				(function (self) {
+					return function(info) {
+						self.onKeyUp(info);
+					};
+				})(this)
+			);
+		}
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"ignoreInput": this.ignoreInput,
+			"enabled": this.enabled,
+			"s": this.s,
+			"a": this.a,
+			"m": this.m,
+			"maxspeed": this.maxspeed,
+			"acc": this.acc,
+			"dec": this.dec,
+			"steerSpeed": this.steerSpeed,
+			"driftRecover": this.driftRecover,
+			"friction": this.friction,
+			"lastx": this.lastx,
+			"lasty": this.lasty,
+			"lastAngle": this.lastAngle
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.ignoreInput = o["ignoreInput"];
+		this.enabled = o["enabled"];
+		this.s = o["s"];
+		this.a = o["a"];
+		this.m = o["m"];
+		this.maxspeed = o["maxspeed"];
+		this.acc = o["acc"];
+		this.dec = o["dec"];
+		this.steerSpeed = o["steerSpeed"];
+		this.driftRecover = o["driftRecover"];
+		this.friction = o["friction"];
+		this.lastx = o["lastx"];
+		this.lasty = o["lasty"];
+		this.lastAngle = o["lastAngle"];
+		this.upkey = false;
+		this.downkey = false;
+		this.leftkey = false;
+		this.rightkey = false;
+		this.simup = false;
+		this.simdown = false;
+		this.simleft = false;
+		this.simright = false;
+	};
+	behinstProto.onKeyDown = function (info)
+	{
+		switch (info.which) {
+		case 37:	// left
+			info.preventDefault();
+			this.leftkey = true;
+			break;
+		case 38:	// up
+			info.preventDefault();
+			this.upkey = true;
+			break;
+		case 39:	// right
+			info.preventDefault();
+			this.rightkey = true;
+			break;
+		case 40:	// down
+			info.preventDefault();
+			this.downkey = true;
+			break;
+		}
+	};
+	behinstProto.onKeyUp = function (info)
+	{
+		switch (info.which) {
+		case 37:	// left
+			info.preventDefault();
+			this.leftkey = false;
+			break;
+		case 38:	// up
+			info.preventDefault();
+			this.upkey = false;
+			break;
+		case 39:	// right
+			info.preventDefault();
+			this.rightkey = false;
+			break;
+		case 40:	// down
+			info.preventDefault();
+			this.downkey = false;
+			break;
+		}
+	};
+	behinstProto.onWindowBlur = function ()
+	{
+		this.upkey = false;
+		this.downkey = false;
+		this.leftkey = false;
+		this.rightkey = false;
+	};
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+		var left = this.leftkey || this.simleft;
+		var right = this.rightkey || this.simright;
+		var up = this.upkey || this.simup;
+		var down = this.downkey || this.simdown;
+		this.simleft = false;
+		this.simright = false;
+		this.simup = false;
+		this.simdown = false;
+		if (!this.enabled)
+			return;
+		if (this.setAngle && this.inst.angle !== this.lastAngle)
+		{
+			this.a = this.inst.angle;
+			this.m = this.inst.angle;
+			this.lastAngle = this.inst.angle;
+		}
+		var collobj = this.runtime.testOverlapSolid(this.inst);
+		if (collobj)
+		{
+			this.runtime.registerCollision(this.inst, collobj);
+			if (!this.runtime.pushOutSolidNearest(this.inst))
+				return;		// must be stuck in solid
+		}
+		if (this.ignoreInput)
+		{
+			left = false;
+			right = false;
+			up = false;
+			down = false;
+		}
+		if (up && !down)
+		{
+			this.s += this.acc * dt;
+			if (this.s > this.maxspeed)
+				this.s = this.maxspeed;
+		}
+		if (down && !up)
+		{
+			this.s -= this.dec * dt;
+			if (this.s < -this.maxspeed)
+				this.s = -this.maxspeed;
+		}
+		if (down === up)
+		{
+			if (this.s > 0)
+			{
+				this.s -= this.dec * dt * 0.1;
+				if (this.s < 0)
+					this.s = 0;
+			}
+			else if (this.s < 0)
+			{
+				this.s += this.dec * dt * 0.1;
+				if (this.s > 0)
+					this.s = 0;
+			}
+		}
+		if (this.s < 0)
+		{
+			var temp = left;
+			left = right;
+			right = temp;
+		}
+		if (left && !right)
+		{
+			this.a = cr.clamp_angle(this.a - this.steerSpeed * dt * (Math.abs(this.s) / this.maxspeed));
+		}
+		if (right && !left)
+		{
+			this.a = cr.clamp_angle(this.a + this.steerSpeed * dt * (Math.abs(this.s) / this.maxspeed));
+		}
+		var recover = this.driftRecover * dt;
+		var diff = cr.angleDiff(this.a, this.m);
+		if (diff > cr.to_radians(90))
+			recover += (diff - cr.to_radians(90));
+		if (diff <= recover)
+			this.m = cr.clamp_angle(this.a);
+		else if (cr.angleClockwise(this.a, this.m))
+			this.m = cr.clamp_angle(this.m + recover);
+		else
+			this.m = cr.clamp_angle(this.m - recover);
+		this.lastx = this.inst.x;
+		this.lasty = this.inst.y;
+		if (this.s !== 0 && dt !== 0)
+		{
+			this.inst.x += Math.cos(this.m) * this.s * dt;
+			this.inst.y += Math.sin(this.m) * this.s * dt;
+			if (this.setAngle)
+			{
+				this.inst.angle = this.a;
+				this.lastAngle = this.a;
+			}
+			this.inst.set_bbox_changed();
+			var hitsolid = this.runtime.testOverlapSolid(this.inst);
+			if (hitsolid)
+			{
+				this.runtime.registerCollision(this.inst, hitsolid);
+				this.s = Math.abs(this.s);
+				this.m = this.runtime.calculateSolidBounceAngle(this.inst, this.lastx, this.lasty);
+				this.inst.x += Math.cos(this.m) * this.s * dt;	// move out for another tick to try and avoid solid
+				this.inst.y += Math.sin(this.m) * this.s * dt;
+				this.inst.set_bbox_changed();
+				this.s *= (1 - this.friction);
+				if (!this.runtime.pushOutSolid(this.inst, Math.cos(this.m), Math.sin(this.m), Math.max(this.s * 2.5 * dt, 30)))
+					this.runtime.pushOutSolidNearest(this.inst, 100);
+			}
+		}
+		else if (this.setAngle && this.inst.angle !== this.a)
+		{
+			this.inst.angle = this.a;
+			this.lastAngle = this.a;
+			this.inst.set_bbox_changed();
+			if (this.runtime.testOverlapSolid(this.inst))
+				this.runtime.pushOutSolidNearest(this.inst, 100);
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.IsMoving = function ()
+	{
+		return this.s !== 0;
+	};
+	Cnds.prototype.CompareSpeed = function (cmp, s)
+	{
+		return cr.do_cmp(this.s, cmp, s);
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Stop = function ()
+	{
+		this.s = 0;
+	};
+	Acts.prototype.SetIgnoreInput = function (ignoring)
+	{
+		this.ignoreInput = ignoring;
+	};
+	Acts.prototype.SetSpeed = function (speed)
+	{
+		if (speed < -this.maxspeed)
+			speed = -this.maxspeed;
+		if (speed > this.maxspeed)
+			speed = this.maxspeed;
+		this.s = speed;
+	};
+	Acts.prototype.SetMaxSpeed = function (maxspeed)
+	{
+		this.maxspeed = maxspeed;
+		if (this.maxspeed < 0)
+			this.maxspeed = 0;
+	};
+	Acts.prototype.SetAcceleration = function (acc)
+	{
+		this.acc = acc;
+		if (this.acc < 0)
+			this.acc = 0;
+	};
+	Acts.prototype.SetDeceleration = function (dec)
+	{
+		this.dec = dec;
+		if (this.dec < 0)
+			this.dec = 0;
+	};
+	Acts.prototype.SimulateControl = function (ctrl)
+	{
+		switch (ctrl) {
+		case 0:		this.simleft = true;	break;
+		case 1:		this.simright = true;	break;
+		case 2:		this.simup = true;		break;
+		case 3:		this.simdown = true;	break;
+		}
+	};
+	Acts.prototype.SetEnabled = function (en)
+	{
+		this.enabled = (en === 1);
+	};
+	Acts.prototype.SetSteerSpeed = function (x)
+	{
+		this.steerSpeed = cr.to_radians(x);
+	};
+	Acts.prototype.SetDriftRecover = function (x)
+	{
+		this.driftRecover = cr.to_radians(x);
+	};
+	Acts.prototype.SetFriction = function (x)
+	{
+		this.friction = x;
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.Speed = function (ret)
+	{
+		ret.set_float(this.s);
+	};
+	Exps.prototype.MaxSpeed = function (ret)
+	{
+		ret.set_float(this.maxspeed);
+	};
+	Exps.prototype.Acceleration = function (ret)
+	{
+		ret.set_float(this.acc);
+	};
+	Exps.prototype.Deceleration = function (ret)
+	{
+		ret.set_float(this.dec);
+	};
+	Exps.prototype.MovingAngle = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.m));
+	};
+	Exps.prototype.VectorX = function (ret)
+	{
+		ret.set_float(Math.cos(this.m) * this.s);
+	};
+	Exps.prototype.VectorY = function (ret)
+	{
+		ret.set_float(Math.sin(this.m) * this.s);
+	};
+	Exps.prototype.SteerSpeed = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.steerSpeed));
+	};
+	Exps.prototype.DriftRecover = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.driftRecover));
+	};
+	Exps.prototype.Friction = function (ret)
+	{
+		ret.set_float(this.friction);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Fade = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Fade.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.activeAtStart = this.properties[0] === 1;
+		this.setMaxOpacity = false;					// used to retrieve maxOpacity once in first 'Start fade' action if initially inactive
+		this.fadeInTime = this.properties[1];
+		this.waitTime = this.properties[2];
+		this.fadeOutTime = this.properties[3];
+		this.destroy = this.properties[4];			// 0 = no, 1 = after fade out
+		this.stage = this.activeAtStart ? 0 : 3;		// 0 = fade in, 1 = wait, 2 = fade out, 3 = done
+		if (this.recycled)
+			this.stageTime.reset();
+		else
+			this.stageTime = new cr.KahanAdder();
+		this.maxOpacity = (this.inst.opacity ? this.inst.opacity : 1.0);
+		if (this.activeAtStart)
+		{
+			if (this.fadeInTime === 0)
+			{
+				this.stage = 1;
+				if (this.waitTime === 0)
+					this.stage = 2;
+			}
+			else
+			{
+				this.inst.opacity = 0;
+				this.runtime.redraw = true;
+			}
+		}
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"fit": this.fadeInTime,
+			"wt": this.waitTime,
+			"fot": this.fadeOutTime,
+			"s": this.stage,
+			"st": this.stageTime.sum,
+			"mo": this.maxOpacity,
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.fadeInTime = o["fit"];
+		this.waitTime = o["wt"];
+		this.fadeOutTime = o["fot"];
+		this.stage = o["s"];
+		this.stageTime.reset();
+		this.stageTime.sum = o["st"];
+		this.maxOpacity = o["mo"];
+	};
+	behinstProto.tick = function ()
+	{
+		this.stageTime.add(this.runtime.getDt(this.inst));
+		if (this.stage === 0)
+		{
+			this.inst.opacity = (this.stageTime.sum / this.fadeInTime) * this.maxOpacity;
+			this.runtime.redraw = true;
+			if (this.inst.opacity >= this.maxOpacity)
+			{
+				this.inst.opacity = this.maxOpacity;
+				this.stage = 1;	// wait stage
+				this.stageTime.reset();
+				this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnFadeInEnd, this.inst);
+			}
+		}
+		if (this.stage === 1)
+		{
+			if (this.stageTime.sum >= this.waitTime)
+			{
+				this.stage = 2;	// fade out stage
+				this.stageTime.reset();
+				this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnWaitEnd, this.inst);
+			}
+		}
+		if (this.stage === 2)
+		{
+			if (this.fadeOutTime !== 0)
+			{
+				this.inst.opacity = this.maxOpacity - ((this.stageTime.sum / this.fadeOutTime) * this.maxOpacity);
+				this.runtime.redraw = true;
+				if (this.inst.opacity < 0)
+				{
+					this.inst.opacity = 0;
+					this.stage = 3;	// done
+					this.stageTime.reset();
+					this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnFadeOutEnd, this.inst);
+					if (this.destroy === 1)
+						this.runtime.DestroyInstance(this.inst);
+				}
+			}
+		}
+	};
+	behinstProto.doStart = function ()
+	{
+		this.stage = 0;
+		this.stageTime.reset();
+		if (this.fadeInTime === 0)
+		{
+			this.stage = 1;
+			if (this.waitTime === 0)
+				this.stage = 2;
+		}
+		else
+		{
+			this.inst.opacity = 0;
+			this.runtime.redraw = true;
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.OnFadeOutEnd = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnFadeInEnd = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnWaitEnd = function ()
+	{
+		return true;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.StartFade = function ()
+	{
+		if (!this.activeAtStart && !this.setMaxOpacity)
+		{
+			this.maxOpacity = (this.inst.opacity ? this.inst.opacity : 1.0);
+			this.setMaxOpacity = true;
+		}
+		if (this.stage === 3)
+			this.doStart();
+	};
+	Acts.prototype.RestartFade = function ()
+	{
+		this.doStart();
+	};
+	Acts.prototype.SetFadeInTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.fadeInTime = t;
+	};
+	Acts.prototype.SetWaitTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.waitTime = t;
+	};
+	Acts.prototype.SetFadeOutTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.fadeOutTime = t;
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.FadeInTime = function (ret)
+	{
+		ret.set_float(this.fadeInTime);
+	};
+	Exps.prototype.WaitTime = function (ret)
+	{
+		ret.set_float(this.waitTime);
+	};
+	Exps.prototype.FadeOutTime = function (ret)
+	{
+		ret.set_float(this.fadeOutTime);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Pin = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Pin.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.pinObject = null;
+		this.pinObjectUid = -1;		// for loading
+		this.pinAngle = 0;
+		this.pinDist = 0;
+		this.myStartAngle = 0;
+		this.theirStartAngle = 0;
+		this.lastKnownAngle = 0;
+		this.mode = 0;				// 0 = position & angle; 1 = position; 2 = angle; 3 = rope; 4 = bar
+		var self = this;
+		if (!this.recycled)
+		{
+			this.myDestroyCallback = (function(inst) {
+													self.onInstanceDestroyed(inst);
+												});
+		}
+		this.runtime.addDestroyCallback(this.myDestroyCallback);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"uid": this.pinObject ? this.pinObject.uid : -1,
+			"pa": this.pinAngle,
+			"pd": this.pinDist,
+			"msa": this.myStartAngle,
+			"tsa": this.theirStartAngle,
+			"lka": this.lastKnownAngle,
+			"m": this.mode
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.pinObjectUid = o["uid"];		// wait until afterLoad to look up
+		this.pinAngle = o["pa"];
+		this.pinDist = o["pd"];
+		this.myStartAngle = o["msa"];
+		this.theirStartAngle = o["tsa"];
+		this.lastKnownAngle = o["lka"];
+		this.mode = o["m"];
+	};
+	behinstProto.afterLoad = function ()
+	{
+		if (this.pinObjectUid === -1)
+			this.pinObject = null;
+		else
+		{
+			this.pinObject = this.runtime.getObjectByUID(this.pinObjectUid);
+;
+		}
+		this.pinObjectUid = -1;
+	};
+	behinstProto.onInstanceDestroyed = function (inst)
+	{
+		if (this.pinObject == inst)
+			this.pinObject = null;
+	};
+	behinstProto.onDestroy = function()
+	{
+		this.pinObject = null;
+		this.runtime.removeDestroyCallback(this.myDestroyCallback);
+	};
+	behinstProto.tick = function ()
+	{
+	};
+	behinstProto.tick2 = function ()
+	{
+		if (!this.pinObject)
+			return;
+		if (this.lastKnownAngle !== this.inst.angle)
+			this.myStartAngle = cr.clamp_angle(this.myStartAngle + (this.inst.angle - this.lastKnownAngle));
+		var newx = this.inst.x;
+		var newy = this.inst.y;
+		if (this.mode === 3 || this.mode === 4)		// rope mode or bar mode
+		{
+			var dist = cr.distanceTo(this.inst.x, this.inst.y, this.pinObject.x, this.pinObject.y);
+			if ((dist > this.pinDist) || (this.mode === 4 && dist < this.pinDist))
+			{
+				var a = cr.angleTo(this.pinObject.x, this.pinObject.y, this.inst.x, this.inst.y);
+				newx = this.pinObject.x + Math.cos(a) * this.pinDist;
+				newy = this.pinObject.y + Math.sin(a) * this.pinDist;
+			}
+		}
+		else
+		{
+			newx = this.pinObject.x + Math.cos(this.pinObject.angle + this.pinAngle) * this.pinDist;
+			newy = this.pinObject.y + Math.sin(this.pinObject.angle + this.pinAngle) * this.pinDist;
+		}
+		var newangle = cr.clamp_angle(this.myStartAngle + (this.pinObject.angle - this.theirStartAngle));
+		this.lastKnownAngle = newangle;
+		if ((this.mode === 0 || this.mode === 1 || this.mode === 3 || this.mode === 4)
+			&& (this.inst.x !== newx || this.inst.y !== newy))
+		{
+			this.inst.x = newx;
+			this.inst.y = newy;
+			this.inst.set_bbox_changed();
+		}
+		if ((this.mode === 0 || this.mode === 2) && (this.inst.angle !== newangle))
+		{
+			this.inst.angle = newangle;
+			this.inst.set_bbox_changed();
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.IsPinned = function ()
+	{
+		return !!this.pinObject;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Pin = function (obj, mode_)
+	{
+		if (!obj)
+			return;
+		var otherinst = obj.getFirstPicked(this.inst);
+		if (!otherinst)
+			return;
+		this.pinObject = otherinst;
+		this.pinAngle = cr.angleTo(otherinst.x, otherinst.y, this.inst.x, this.inst.y) - otherinst.angle;
+		this.pinDist = cr.distanceTo(otherinst.x, otherinst.y, this.inst.x, this.inst.y);
+		this.myStartAngle = this.inst.angle;
+		this.lastKnownAngle = this.inst.angle;
+		this.theirStartAngle = otherinst.angle;
+		this.mode = mode_;
+	};
+	Acts.prototype.Unpin = function ()
+	{
+		this.pinObject = null;
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.PinnedUID = function (ret)
+	{
+		ret.set_int(this.pinObject ? this.pinObject.uid : -1);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Platform = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Platform.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	var ANIMMODE_STOPPED = 0;
+	var ANIMMODE_MOVING = 1;
+	var ANIMMODE_JUMPING = 2;
+	var ANIMMODE_FALLING = 3;
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.leftkey = false;
+		this.rightkey = false;
+		this.jumpkey = false;
+		this.jumped = false;			// prevent bunnyhopping
+		this.doubleJumped = false;
+		this.canDoubleJump = false;
+		this.ignoreInput = false;
+		this.simleft = false;
+		this.simright = false;
+		this.simjump = false;
+		this.lastFloorObject = null;
+		this.loadFloorObject = -1;
+		this.lastFloorX = 0;
+		this.lastFloorY = 0;
+		this.floorIsJumpthru = false;
+		this.animMode = ANIMMODE_STOPPED;
+		this.fallthrough = 0;			// fall through jump-thru.  >0 to disable, lasts a few ticks
+		this.firstTick = true;
+		this.dx = 0;
+		this.dy = 0;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.updateGravity = function()
+	{
+		this.downx = Math.cos(this.ga);
+		this.downy = Math.sin(this.ga);
+		this.rightx = Math.cos(this.ga - Math.PI / 2);
+		this.righty = Math.sin(this.ga - Math.PI / 2);
+		this.downx = cr.round6dp(this.downx);
+		this.downy = cr.round6dp(this.downy);
+		this.rightx = cr.round6dp(this.rightx);
+		this.righty = cr.round6dp(this.righty);
+		this.g1 = this.g;
+		if (this.g < 0)
+		{
+			this.downx *= -1;
+			this.downy *= -1;
+			this.g = Math.abs(this.g);
+		}
+	};
+	behinstProto.onCreate = function()
+	{
+		this.maxspeed = this.properties[0];
+		this.acc = this.properties[1];
+		this.dec = this.properties[2];
+		this.jumpStrength = this.properties[3];
+		this.g = this.properties[4];
+		this.g1 = this.g;
+		this.maxFall = this.properties[5];
+		this.enableDoubleJump = (this.properties[6] !== 0);	// 0=disabled, 1=enabled
+		this.jumpSustain = (this.properties[7] / 1000);		// convert ms to s
+		this.defaultControls = (this.properties[8] === 1);	// 0=no, 1=yes
+		this.enabled = (this.properties[9] !== 0);
+		this.wasOnFloor = false;
+		this.wasOverJumpthru = this.runtime.testOverlapJumpThru(this.inst);
+		this.loadOverJumpthru = -1;
+		this.sustainTime = 0;				// time of jump sustain remaining
+		this.ga = cr.to_radians(90);
+		this.updateGravity();
+		var self = this;
+		if (this.defaultControls && !this.runtime.isDomFree)
+		{
+			jQuery(document).keydown(function(info) {
+						self.onKeyDown(info);
+					});
+			jQuery(document).keyup(function(info) {
+						self.onKeyUp(info);
+					});
+		}
+		if (!this.recycled)
+		{
+			this.myDestroyCallback = function(inst) {
+										self.onInstanceDestroyed(inst);
+									};
+		}
+		this.runtime.addDestroyCallback(this.myDestroyCallback);
+		this.inst.extra["isPlatformBehavior"] = true;
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"ii": this.ignoreInput,
+			"lfx": this.lastFloorX,
+			"lfy": this.lastFloorY,
+			"lfo": (this.lastFloorObject ? this.lastFloorObject.uid : -1),
+			"am": this.animMode,
+			"en": this.enabled,
+			"fall": this.fallthrough,
+			"ft": this.firstTick,
+			"dx": this.dx,
+			"dy": this.dy,
+			"ms": this.maxspeed,
+			"acc": this.acc,
+			"dec": this.dec,
+			"js": this.jumpStrength,
+			"g": this.g,
+			"g1": this.g1,
+			"mf": this.maxFall,
+			"wof": this.wasOnFloor,
+			"woj": (this.wasOverJumpthru ? this.wasOverJumpthru.uid : -1),
+			"ga": this.ga,
+			"edj": this.enableDoubleJump,
+			"cdj": this.canDoubleJump,
+			"dj": this.doubleJumped,
+			"sus": this.jumpSustain
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.ignoreInput = o["ii"];
+		this.lastFloorX = o["lfx"];
+		this.lastFloorY = o["lfy"];
+		this.loadFloorObject = o["lfo"];
+		this.animMode = o["am"];
+		this.enabled = o["en"];
+		this.fallthrough = o["fall"];
+		this.firstTick = o["ft"];
+		this.dx = o["dx"];
+		this.dy = o["dy"];
+		this.maxspeed = o["ms"];
+		this.acc = o["acc"];
+		this.dec = o["dec"];
+		this.jumpStrength = o["js"];
+		this.g = o["g"];
+		this.g1 = o["g1"];
+		this.maxFall = o["mf"];
+		this.wasOnFloor = o["wof"];
+		this.loadOverJumpthru = o["woj"];
+		this.ga = o["ga"];
+		this.enableDoubleJump = o["edj"];
+		this.canDoubleJump = o["cdj"];
+		this.doubleJumped = o["dj"];
+		this.jumpSustain = o["sus"];
+		this.leftkey = false;
+		this.rightkey = false;
+		this.jumpkey = false;
+		this.jumped = false;
+		this.simleft = false;
+		this.simright = false;
+		this.simjump = false;
+		this.sustainTime = 0;
+		this.updateGravity();
+	};
+	behinstProto.afterLoad = function ()
+	{
+		if (this.loadFloorObject === -1)
+			this.lastFloorObject = null;
+		else
+			this.lastFloorObject = this.runtime.getObjectByUID(this.loadFloorObject);
+		if (this.loadOverJumpthru === -1)
+			this.wasOverJumpthru = null;
+		else
+			this.wasOverJumpthru = this.runtime.getObjectByUID(this.loadOverJumpthru);
+	};
+	behinstProto.onInstanceDestroyed = function (inst)
+	{
+		if (this.lastFloorObject == inst)
+			this.lastFloorObject = null;
+	};
+	behinstProto.onDestroy = function ()
+	{
+		this.lastFloorObject = null;
+		this.runtime.removeDestroyCallback(this.myDestroyCallback);
+	};
+	behinstProto.onKeyDown = function (info)
+	{
+		switch (info.which) {
+		case 38:	// up
+			info.preventDefault();
+			this.jumpkey = true;
+			break;
+		case 37:	// left
+			info.preventDefault();
+			this.leftkey = true;
+			break;
+		case 39:	// right
+			info.preventDefault();
+			this.rightkey = true;
+			break;
+		}
+	};
+	behinstProto.onKeyUp = function (info)
+	{
+		switch (info.which) {
+		case 38:	// up
+			info.preventDefault();
+			this.jumpkey = false;
+			this.jumped = false;
+			break;
+		case 37:	// left
+			info.preventDefault();
+			this.leftkey = false;
+			break;
+		case 39:	// right
+			info.preventDefault();
+			this.rightkey = false;
+			break;
+		}
+	};
+	behinstProto.onWindowBlur = function ()
+	{
+		this.leftkey = false;
+		this.rightkey = false;
+		this.jumpkey = false;
+	};
+	behinstProto.getGDir = function ()
+	{
+		if (this.g < 0)
+			return -1;
+		else
+			return 1;
+	};
+	behinstProto.isOnFloor = function ()
+	{
+		var ret = null;
+		var ret2 = null;
+		var i, len, j;
+		var oldx = this.inst.x;
+		var oldy = this.inst.y;
+		this.inst.x += this.downx;
+		this.inst.y += this.downy;
+		this.inst.set_bbox_changed();
+		if (this.lastFloorObject && this.runtime.testOverlap(this.inst, this.lastFloorObject) &&
+			(!this.runtime.typeHasBehavior(this.lastFloorObject.type, cr.behaviors.solid) || this.lastFloorObject.extra["solidEnabled"]))
+		{
+			this.inst.x = oldx;
+			this.inst.y = oldy;
+			this.inst.set_bbox_changed();
+			return this.lastFloorObject;
+		}
+		else
+		{
+			ret = this.runtime.testOverlapSolid(this.inst);
+			if (!ret && this.fallthrough === 0)
+				ret2 = this.runtime.testOverlapJumpThru(this.inst, true);
+			this.inst.x = oldx;
+			this.inst.y = oldy;
+			this.inst.set_bbox_changed();
+			if (ret)		// was overlapping solid
+			{
+				if (this.runtime.testOverlap(this.inst, ret))
+					return null;
+				else
+				{
+					this.floorIsJumpthru = false;
+					return ret;
+				}
+			}
+			if (ret2 && ret2.length)
+			{
+				for (i = 0, j = 0, len = ret2.length; i < len; i++)
+				{
+					ret2[j] = ret2[i];
+					if (!this.runtime.testOverlap(this.inst, ret2[i]))
+						j++;
+				}
+				if (j >= 1)
+				{
+					this.floorIsJumpthru = true;
+					return ret2[0];
+				}
+			}
+			return null;
+		}
+	};
+	behinstProto.tick = function ()
+	{
+	};
+	behinstProto.posttick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+		var mx, my, obstacle, mag, allover, i, len, j, oldx, oldy;
+		if (!this.jumpkey && !this.simjump)
+			this.jumped = false;
+		var left = this.leftkey || this.simleft;
+		var right = this.rightkey || this.simright;
+		var jumpkey = (this.jumpkey || this.simjump);
+		var jump = jumpkey && !this.jumped;
+		this.simleft = false;
+		this.simright = false;
+		this.simjump = false;
+		if (!this.enabled)
+			return;
+		if (this.ignoreInput)
+		{
+			left = false;
+			right = false;
+			jumpkey = false;
+			jump = false;
+		}
+		if (!jumpkey)
+			this.sustainTime = 0;
+		var lastFloor = this.lastFloorObject;
+		var floor_moved = false;
+		if (this.firstTick)
+		{
+			if (this.runtime.testOverlapSolid(this.inst) || this.runtime.testOverlapJumpThru(this.inst))
+			{
+				this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 4, true);
+			}
+			this.firstTick = false;
+		}
+		if (lastFloor && this.dy === 0 && (lastFloor.y !== this.lastFloorY || lastFloor.x !== this.lastFloorX))
+		{
+			mx = (lastFloor.x - this.lastFloorX);
+			my = (lastFloor.y - this.lastFloorY);
+			this.inst.x += mx;
+			this.inst.y += my;
+			this.inst.set_bbox_changed();
+			this.lastFloorX = lastFloor.x;
+			this.lastFloorY = lastFloor.y;
+			floor_moved = true;
+			if (this.runtime.testOverlapSolid(this.inst))
+			{
+				this.runtime.pushOutSolid(this.inst, -mx, -my, Math.sqrt(mx * mx + my * my) * 2.5);
+			}
+		}
+		var floor_ = this.isOnFloor();
+		var collobj = this.runtime.testOverlapSolid(this.inst);
+		if (collobj)
+		{
+			if (this.inst.extra["inputPredicted"])
+			{
+				this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 10, false);
+			}
+			else if (this.runtime.pushOutSolidNearest(this.inst, Math.max(this.inst.width, this.inst.height) / 2))
+			{
+				this.runtime.registerCollision(this.inst, collobj);
+			}
+			else
+				return;
+		}
+		if (floor_)
+		{
+			this.doubleJumped = false;		// reset double jump flags for next jump
+			this.canDoubleJump = false;
+			if (this.dy > 0)
+			{
+				if (!this.wasOnFloor)
+				{
+					this.runtime.pushInFractional(this.inst, -this.downx, -this.downy, floor_, 16);
+					this.wasOnFloor = true;
+				}
+				this.dy = 0;
+			}
+			if (lastFloor != floor_)
+			{
+				this.lastFloorObject = floor_;
+				this.lastFloorX = floor_.x;
+				this.lastFloorY = floor_.y;
+				this.runtime.registerCollision(this.inst, floor_);
+			}
+			else if (floor_moved)
+			{
+				collobj = this.runtime.testOverlapSolid(this.inst);
+				if (collobj)
+				{
+					this.runtime.registerCollision(this.inst, collobj);
+					if (mx !== 0)
+					{
+						if (mx > 0)
+							this.runtime.pushOutSolid(this.inst, -this.rightx, -this.righty);
+						else
+							this.runtime.pushOutSolid(this.inst, this.rightx, this.righty);
+					}
+					this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy);
+				}
+			}
+		}
+		else
+		{
+			if (!jumpkey)
+				this.canDoubleJump = true;
+		}
+		if ((floor_ && jump) || (!floor_ && this.enableDoubleJump && jumpkey && this.canDoubleJump && !this.doubleJumped))
+		{
+			oldx = this.inst.x;
+			oldy = this.inst.y;
+			this.inst.x -= this.downx;
+			this.inst.y -= this.downy;
+			this.inst.set_bbox_changed();
+			if (!this.runtime.testOverlapSolid(this.inst))
+			{
+				this.sustainTime = this.jumpSustain;
+				this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnJump, this.inst);
+				this.animMode = ANIMMODE_JUMPING;
+				this.dy = -this.jumpStrength;
+				jump = true;		// set in case is double jump
+				if (floor_)
+					this.jumped = true;
+				else
+					this.doubleJumped = true;
+			}
+			else
+				jump = false;
+			this.inst.x = oldx;
+			this.inst.y = oldy;
+			this.inst.set_bbox_changed();
+		}
+		if (!floor_)
+		{
+			if (jumpkey && this.sustainTime > 0)
+			{
+				this.dy = -this.jumpStrength;
+				this.sustainTime -= dt;
+			}
+			else
+			{
+				this.lastFloorObject = null;
+				this.dy += this.g * dt;
+				if (this.dy > this.maxFall)
+					this.dy = this.maxFall;
+			}
+			if (jump)
+				this.jumped = true;
+		}
+		this.wasOnFloor = !!floor_;
+		if (left == right)	// both up or both down
+		{
+			if (this.dx < 0)
+			{
+				this.dx += this.dec * dt;
+				if (this.dx > 0)
+					this.dx = 0;
+			}
+			else if (this.dx > 0)
+			{
+				this.dx -= this.dec * dt;
+				if (this.dx < 0)
+					this.dx = 0;
+			}
+		}
+		if (left && !right)
+		{
+			if (this.dx > 0)
+				this.dx -= (this.acc + this.dec) * dt;
+			else
+				this.dx -= this.acc * dt;
+		}
+		if (right && !left)
+		{
+			if (this.dx < 0)
+				this.dx += (this.acc + this.dec) * dt;
+			else
+				this.dx += this.acc * dt;
+		}
+		if (this.dx > this.maxspeed)
+			this.dx = this.maxspeed;
+		else if (this.dx < -this.maxspeed)
+			this.dx = -this.maxspeed;
+		var landed = false;
+		if (this.dx !== 0)
+		{
+			oldx = this.inst.x;
+			oldy = this.inst.y;
+			mx = this.dx * dt * this.rightx;
+			my = this.dx * dt * this.righty;
+			this.inst.x += this.rightx * (this.dx > 1 ? 1 : -1) - this.downx;
+			this.inst.y += this.righty * (this.dx > 1 ? 1 : -1) - this.downy;
+			this.inst.set_bbox_changed();
+			var is_jumpthru = false;
+			var slope_too_steep = this.runtime.testOverlapSolid(this.inst);
+			/*
+			if (!slope_too_steep && floor_)
+			{
+				slope_too_steep = this.runtime.testOverlapJumpThru(this.inst);
+				is_jumpthru = true;
+				if (slope_too_steep)
+				{
+					this.inst.x = oldx;
+					this.inst.y = oldy;
+					this.inst.set_bbox_changed();
+					if (this.runtime.testOverlap(this.inst, slope_too_steep))
+					{
+						slope_too_steep = null;
+						is_jumpthru = false;
+					}
+				}
+			}
+			*/
+			this.inst.x = oldx + mx;
+			this.inst.y = oldy + my;
+			this.inst.set_bbox_changed();
+			obstacle = this.runtime.testOverlapSolid(this.inst);
+			if (!obstacle && floor_)
+			{
+				obstacle = this.runtime.testOverlapJumpThru(this.inst);
+				if (obstacle)
+				{
+					this.inst.x = oldx;
+					this.inst.y = oldy;
+					this.inst.set_bbox_changed();
+					if (this.runtime.testOverlap(this.inst, obstacle))
+					{
+						obstacle = null;
+						is_jumpthru = false;
+					}
+					else
+						is_jumpthru = true;
+					this.inst.x = oldx + mx;
+					this.inst.y = oldy + my;
+					this.inst.set_bbox_changed();
+				}
+			}
+			if (obstacle)
+			{
+				var push_dist = Math.abs(this.dx * dt) + 2;
+				if (slope_too_steep || !this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, push_dist, is_jumpthru, obstacle))
+				{
+					this.runtime.registerCollision(this.inst, obstacle);
+					push_dist = Math.max(Math.abs(this.dx * dt * 2.5), 30);
+					if (!this.runtime.pushOutSolid(this.inst, this.rightx * (this.dx < 0 ? 1 : -1), this.righty * (this.dx < 0 ? 1 : -1), push_dist, false))
+					{
+						this.inst.x = oldx;
+						this.inst.y = oldy;
+						this.inst.set_bbox_changed();
+					}
+					else if (floor_ && !is_jumpthru && !this.floorIsJumpthru)
+					{
+						oldx = this.inst.x;
+						oldy = this.inst.y;
+						this.inst.x += this.downx;
+						this.inst.y += this.downy;
+						if (this.runtime.testOverlapSolid(this.inst))
+						{
+							if (!this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 3, false))
+							{
+								this.inst.x = oldx;
+								this.inst.y = oldy;
+								this.inst.set_bbox_changed();
+							}
+						}
+						else
+						{
+							this.inst.x = oldx;
+							this.inst.y = oldy;
+							this.inst.set_bbox_changed();
+						}
+					}
+					if (!is_jumpthru)
+						this.dx = 0;	// stop
+				}
+				else if (!slope_too_steep && !jump && (Math.abs(this.dy) < Math.abs(this.jumpStrength / 4)))
+				{
+					this.dy = 0;
+					if (!floor_)
+						landed = true;
+				}
+			}
+			else
+			{
+				var newfloor = this.isOnFloor();
+				if (floor_ && !newfloor)
+				{
+					mag = Math.ceil(Math.abs(this.dx * dt)) + 2;
+					oldx = this.inst.x;
+					oldy = this.inst.y;
+					this.inst.x += this.downx * mag;
+					this.inst.y += this.downy * mag;
+					this.inst.set_bbox_changed();
+					if (this.runtime.testOverlapSolid(this.inst) || this.runtime.testOverlapJumpThru(this.inst))
+						this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, mag + 2, true);
+					else
+					{
+						this.inst.x = oldx;
+						this.inst.y = oldy;
+						this.inst.set_bbox_changed();
+					}
+				}
+				else if (newfloor && this.dy === 0)
+				{
+					this.runtime.pushInFractional(this.inst, -this.downx, -this.downy, newfloor, 16);
+				}
+			}
+		}
+		if (this.dy !== 0)
+		{
+			oldx = this.inst.x;
+			oldy = this.inst.y;
+			this.inst.x += this.dy * dt * this.downx;
+			this.inst.y += this.dy * dt * this.downy;
+			var newx = this.inst.x;
+			var newy = this.inst.y;
+			this.inst.set_bbox_changed();
+			collobj = this.runtime.testOverlapSolid(this.inst);
+			var fell_on_jumpthru = false;
+			if (!collobj && (this.dy > 0) && !floor_)
+			{
+				allover = this.fallthrough > 0 ? null : this.runtime.testOverlapJumpThru(this.inst, true);
+				if (allover && allover.length)
+				{
+					if (this.wasOverJumpthru)
+					{
+						this.inst.x = oldx;
+						this.inst.y = oldy;
+						this.inst.set_bbox_changed();
+						for (i = 0, j = 0, len = allover.length; i < len; i++)
+						{
+							allover[j] = allover[i];
+							if (!this.runtime.testOverlap(this.inst, allover[i]))
+								j++;
+						}
+						allover.length = j;
+						this.inst.x = newx;
+						this.inst.y = newy;
+						this.inst.set_bbox_changed();
+					}
+					if (allover.length >= 1)
+						collobj = allover[0];
+				}
+				fell_on_jumpthru = !!collobj;
+			}
+			if (collobj)
+			{
+				this.runtime.registerCollision(this.inst, collobj);
+				this.sustainTime = 0;
+				var push_dist = (fell_on_jumpthru ? Math.abs(this.dy * dt * 2.5 + 10) : Math.max(Math.abs(this.dy * dt * 2.5 + 10), 30));
+				if (!this.runtime.pushOutSolid(this.inst, this.downx * (this.dy < 0 ? 1 : -1), this.downy * (this.dy < 0 ? 1 : -1), push_dist, fell_on_jumpthru, collobj))
+				{
+					this.inst.x = oldx;
+					this.inst.y = oldy;
+					this.inst.set_bbox_changed();
+					this.wasOnFloor = true;		// prevent adjustment for unexpected floor landings
+					if (!fell_on_jumpthru)
+						this.dy = 0;	// stop
+				}
+				else
+				{
+					this.lastFloorObject = collobj;
+					this.lastFloorX = collobj.x;
+					this.lastFloorY = collobj.y;
+					this.floorIsJumpthru = fell_on_jumpthru;
+					if (fell_on_jumpthru)
+						landed = true;
+					this.dy = 0;	// stop
+				}
+			}
+		}
+		if (this.animMode !== ANIMMODE_FALLING && this.dy > 0 && !floor_)
+		{
+			this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnFall, this.inst);
+			this.animMode = ANIMMODE_FALLING;
+		}
+		if (floor_ || landed)
+		{
+			if (this.animMode === ANIMMODE_FALLING || landed || (jump && this.dy === 0))
+			{
+				this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnLand, this.inst);
+				if (this.dx === 0 && this.dy === 0)
+					this.animMode = ANIMMODE_STOPPED;
+				else
+					this.animMode = ANIMMODE_MOVING;
+			}
+			else
+			{
+				if (this.animMode !== ANIMMODE_STOPPED && this.dx === 0 && this.dy === 0)
+				{
+					this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnStop, this.inst);
+					this.animMode = ANIMMODE_STOPPED;
+				}
+				if (this.animMode !== ANIMMODE_MOVING && (this.dx !== 0 || this.dy !== 0) && !jump)
+				{
+					this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnMove, this.inst);
+					this.animMode = ANIMMODE_MOVING;
+				}
+			}
+		}
+		if (this.fallthrough > 0)
+			this.fallthrough--;
+		this.wasOverJumpthru = this.runtime.testOverlapJumpThru(this.inst);
+	};
+	function Cnds() {};
+	Cnds.prototype.IsMoving = function ()
+	{
+		return this.dx !== 0 || this.dy !== 0;
+	};
+	Cnds.prototype.CompareSpeed = function (cmp, s)
+	{
+		var speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
+		return cr.do_cmp(speed, cmp, s);
+	};
+	Cnds.prototype.IsOnFloor = function ()
+	{
+		if (this.dy !== 0)
+			return false;
+		var ret = null;
+		var ret2 = null;
+		var i, len, j;
+		var oldx = this.inst.x;
+		var oldy = this.inst.y;
+		this.inst.x += this.downx;
+		this.inst.y += this.downy;
+		this.inst.set_bbox_changed();
+		ret = this.runtime.testOverlapSolid(this.inst);
+		if (!ret && this.fallthrough === 0)
+			ret2 = this.runtime.testOverlapJumpThru(this.inst, true);
+		this.inst.x = oldx;
+		this.inst.y = oldy;
+		this.inst.set_bbox_changed();
+		if (ret)		// was overlapping solid
+		{
+			return !this.runtime.testOverlap(this.inst, ret);
+		}
+		if (ret2 && ret2.length)
+		{
+			for (i = 0, j = 0, len = ret2.length; i < len; i++)
+			{
+				ret2[j] = ret2[i];
+				if (!this.runtime.testOverlap(this.inst, ret2[i]))
+					j++;
+			}
+			if (j >= 1)
+				return true;
+		}
+		return false;
+	};
+	Cnds.prototype.IsByWall = function (side)
+	{
+		var ret = false;
+		var oldx = this.inst.x;
+		var oldy = this.inst.y;
+		this.inst.x -= this.downx * 3;
+		this.inst.y -= this.downy * 3;
+		this.inst.set_bbox_changed();
+		if (this.runtime.testOverlapSolid(this.inst))
+		{
+			this.inst.x = oldx;
+			this.inst.y = oldy;
+			this.inst.set_bbox_changed();
+			return false;
+		}
+		if (side === 0)		// left
+		{
+			this.inst.x -= this.rightx * 2;
+			this.inst.y -= this.righty * 2;
+		}
+		else
+		{
+			this.inst.x += this.rightx * 2;
+			this.inst.y += this.righty * 2;
+		}
+		this.inst.set_bbox_changed();
+		ret = this.runtime.testOverlapSolid(this.inst);
+		this.inst.x = oldx;
+		this.inst.y = oldy;
+		this.inst.set_bbox_changed();
+		return ret;
+	};
+	Cnds.prototype.IsJumping = function ()
+	{
+		return this.dy < 0;
+	};
+	Cnds.prototype.IsFalling = function ()
+	{
+		return this.dy > 0;
+	};
+	Cnds.prototype.OnJump = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnFall = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnStop = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnMove = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnLand = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsDoubleJumpEnabled = function ()
+	{
+		return this.enableDoubleJump;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetIgnoreInput = function (ignoring)
+	{
+		this.ignoreInput = ignoring;
+	};
+	Acts.prototype.SetMaxSpeed = function (maxspeed)
+	{
+		this.maxspeed = maxspeed;
+		if (this.maxspeed < 0)
+			this.maxspeed = 0;
+	};
+	Acts.prototype.SetAcceleration = function (acc)
+	{
+		this.acc = acc;
+		if (this.acc < 0)
+			this.acc = 0;
+	};
+	Acts.prototype.SetDeceleration = function (dec)
+	{
+		this.dec = dec;
+		if (this.dec < 0)
+			this.dec = 0;
+	};
+	Acts.prototype.SetJumpStrength = function (js)
+	{
+		this.jumpStrength = js;
+		if (this.jumpStrength < 0)
+			this.jumpStrength = 0;
+	};
+	Acts.prototype.SetGravity = function (grav)
+	{
+		if (this.g1 === grav)
+			return;		// no change
+		this.g = grav;
+		this.updateGravity();
+		if (this.runtime.testOverlapSolid(this.inst))
+		{
+			this.runtime.pushOutSolid(this.inst, this.downx, this.downy, 10);
+			this.inst.x += this.downx * 2;
+			this.inst.y += this.downy * 2;
+			this.inst.set_bbox_changed();
+		}
+		this.lastFloorObject = null;
+	};
+	Acts.prototype.SetMaxFallSpeed = function (mfs)
+	{
+		this.maxFall = mfs;
+		if (this.maxFall < 0)
+			this.maxFall = 0;
+	};
+	Acts.prototype.SimulateControl = function (ctrl)
+	{
+		switch (ctrl) {
+		case 0:		this.simleft = true;	break;
+		case 1:		this.simright = true;	break;
+		case 2:		this.simjump = true;	break;
+		}
+	};
+	Acts.prototype.SetVectorX = function (vx)
+	{
+		this.dx = vx;
+	};
+	Acts.prototype.SetVectorY = function (vy)
+	{
+		this.dy = vy;
+	};
+	Acts.prototype.SetGravityAngle = function (a)
+	{
+		a = cr.to_radians(a);
+		a = cr.clamp_angle(a);
+		if (this.ga === a)
+			return;		// no change
+		this.ga = a;
+		this.updateGravity();
+		this.lastFloorObject = null;
+	};
+	Acts.prototype.SetEnabled = function (en)
+	{
+		if (this.enabled !== (en === 1))
+		{
+			this.enabled = (en === 1);
+			if (!this.enabled)
+				this.lastFloorObject = null;
+		}
+	};
+	Acts.prototype.FallThrough = function ()
+	{
+		var oldx = this.inst.x;
+		var oldy = this.inst.y;
+		this.inst.x += this.downx;
+		this.inst.y += this.downy;
+		this.inst.set_bbox_changed();
+		var overlaps = this.runtime.testOverlapJumpThru(this.inst, false);
+		this.inst.x = oldx;
+		this.inst.y = oldy;
+		this.inst.set_bbox_changed();
+		if (!overlaps)
+			return;
+		this.fallthrough = 3;			// disable jumpthrus for 3 ticks (1 doesn't do it, 2 does, 3 to be on safe side)
+		this.lastFloorObject = null;
+	};
+	Acts.prototype.SetDoubleJumpEnabled = function (e)
+	{
+		this.enableDoubleJump = (e !== 0);
+	};
+	Acts.prototype.SetJumpSustain = function (s)
+	{
+		this.jumpSustain = s / 1000;		// convert to ms
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.Speed = function (ret)
+	{
+		ret.set_float(Math.sqrt(this.dx * this.dx + this.dy * this.dy));
+	};
+	Exps.prototype.MaxSpeed = function (ret)
+	{
+		ret.set_float(this.maxspeed);
+	};
+	Exps.prototype.Acceleration = function (ret)
+	{
+		ret.set_float(this.acc);
+	};
+	Exps.prototype.Deceleration = function (ret)
+	{
+		ret.set_float(this.dec);
+	};
+	Exps.prototype.JumpStrength = function (ret)
+	{
+		ret.set_float(this.jumpStrength);
+	};
+	Exps.prototype.Gravity = function (ret)
+	{
+		ret.set_float(this.g);
+	};
+	Exps.prototype.GravityAngle = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.ga));
+	};
+	Exps.prototype.MaxFallSpeed = function (ret)
+	{
+		ret.set_float(this.maxFall);
+	};
+	Exps.prototype.MovingAngle = function (ret)
+	{
+		ret.set_float(cr.to_degrees(Math.atan2(this.dy, this.dx)));
+	};
+	Exps.prototype.VectorX = function (ret)
+	{
+		ret.set_float(this.dx);
+	};
+	Exps.prototype.VectorY = function (ret)
+	{
+		ret.set_float(this.dy);
+	};
+	Exps.prototype.JumpSustain = function (ret)
+	{
+		ret.set_float(this.jumpSustain * 1000);		// convert back to ms
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Rotate = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Rotate.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.speed = cr.to_radians(this.properties[0]);
+		this.acc = cr.to_radians(this.properties[1]);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"speed": this.speed,
+			"acc": this.acc
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.speed = o["speed"];
+		this.acc = o["acc"];
+	};
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+		if (dt === 0)
+			return;
+		if (this.acc !== 0)
+			this.speed += this.acc * dt;
+		if (this.speed !== 0)
+		{
+			this.inst.angle = cr.clamp_angle(this.inst.angle + this.speed * dt);
+			this.inst.set_bbox_changed();
+		}
+	};
+	function Cnds() {};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetSpeed = function (s)
+	{
+		this.speed = cr.to_radians(s);
+	};
+	Acts.prototype.SetAcceleration = function (a)
+	{
+		this.acc = cr.to_radians(a);
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.Speed = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.speed));
+	};
+	Exps.prototype.Acceleration = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.acc));
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Sin = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Sin.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.i = 0;		// period offset (radians)
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	var _2pi = 2 * Math.PI;
+	var _pi_2 = Math.PI / 2;
+	var _3pi_2 = (3 * Math.PI) / 2;
+	behinstProto.onCreate = function()
+	{
+		this.active = (this.properties[0] === 1);
+		this.movement = this.properties[1]; // 0=Horizontal|1=Vertical|2=Size|3=Width|4=Height|5=Angle|6=Opacity|7=Value only
+		this.wave = this.properties[2];		// 0=Sine|1=Triangle|2=Sawtooth|3=Reverse sawtooth|4=Square
+		this.period = this.properties[3];
+		this.period += Math.random() * this.properties[4];								// period random
+		if (this.period === 0)
+			this.i = 0;
+		else
+		{
+			this.i = (this.properties[5] / this.period) * _2pi;								// period offset
+			this.i += ((Math.random() * this.properties[6]) / this.period) * _2pi;			// period offset random
+		}
+		this.mag = this.properties[7];													// magnitude
+		this.mag += Math.random() * this.properties[8];									// magnitude random
+		this.initialValue = 0;
+		this.initialValue2 = 0;
+		this.ratio = 0;
+		this.init();
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"i": this.i,
+			"a": this.active,
+			"mv": this.movement,
+			"w": this.wave,
+			"p": this.period,
+			"mag": this.mag,
+			"iv": this.initialValue,
+			"iv2": this.initialValue2,
+			"r": this.ratio,
+			"lkv": this.lastKnownValue,
+			"lkv2": this.lastKnownValue2
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.i = o["i"];
+		this.active = o["a"];
+		this.movement = o["mv"];
+		this.wave = o["w"];
+		this.period = o["p"];
+		this.mag = o["mag"];
+		this.initialValue = o["iv"];
+		this.initialValue2 = o["iv2"] || 0;
+		this.ratio = o["r"];
+		this.lastKnownValue = o["lkv"];
+		this.lastKnownValue2 = o["lkv2"] || 0;
+	};
+	behinstProto.init = function ()
+	{
+		switch (this.movement) {
+		case 0:		// horizontal
+			this.initialValue = this.inst.x;
+			break;
+		case 1:		// vertical
+			this.initialValue = this.inst.y;
+			break;
+		case 2:		// size
+			this.initialValue = this.inst.width;
+			this.ratio = this.inst.height / this.inst.width;
+			break;
+		case 3:		// width
+			this.initialValue = this.inst.width;
+			break;
+		case 4:		// height
+			this.initialValue = this.inst.height;
+			break;
+		case 5:		// angle
+			this.initialValue = this.inst.angle;
+			this.mag = cr.to_radians(this.mag);		// convert magnitude from degrees to radians
+			break;
+		case 6:		// opacity
+			this.initialValue = this.inst.opacity;
+			break;
+		case 7:
+			this.initialValue = 0;
+			break;
+		case 8:		// forwards/backwards
+			this.initialValue = this.inst.x;
+			this.initialValue2 = this.inst.y;
+			break;
+		default:
+;
+		}
+		this.lastKnownValue = this.initialValue;
+		this.lastKnownValue2 = this.initialValue2;
+	};
+	behinstProto.waveFunc = function (x)
+	{
+		x = x % _2pi;
+		switch (this.wave) {
+		case 0:		// sine
+			return Math.sin(x);
+		case 1:		// triangle
+			if (x <= _pi_2)
+				return x / _pi_2;
+			else if (x <= _3pi_2)
+				return 1 - (2 * (x - _pi_2) / Math.PI);
+			else
+				return (x - _3pi_2) / _pi_2 - 1;
+		case 2:		// sawtooth
+			return 2 * x / _2pi - 1;
+		case 3:		// reverse sawtooth
+			return -2 * x / _2pi + 1;
+		case 4:		// square
+			return x < Math.PI ? -1 : 1;
+		};
+		return 0;
+	};
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+		if (!this.active || dt === 0)
+			return;
+		if (this.period === 0)
+			this.i = 0;
+		else
+		{
+			this.i += (dt / this.period) * _2pi;
+			this.i = this.i % _2pi;
+		}
+		this.updateFromPhase();
+	};
+	behinstProto.updateFromPhase = function ()
+	{
+		switch (this.movement) {
+		case 0:		// horizontal
+			if (this.inst.x !== this.lastKnownValue)
+				this.initialValue += this.inst.x - this.lastKnownValue;
+			this.inst.x = this.initialValue + this.waveFunc(this.i) * this.mag;
+			this.lastKnownValue = this.inst.x;
+			break;
+		case 1:		// vertical
+			if (this.inst.y !== this.lastKnownValue)
+				this.initialValue += this.inst.y - this.lastKnownValue;
+			this.inst.y = this.initialValue + this.waveFunc(this.i) * this.mag;
+			this.lastKnownValue = this.inst.y;
+			break;
+		case 2:		// size
+			this.inst.width = this.initialValue + this.waveFunc(this.i) * this.mag;
+			this.inst.height = this.inst.width * this.ratio;
+			break;
+		case 3:		// width
+			this.inst.width = this.initialValue + this.waveFunc(this.i) * this.mag;
+			break;
+		case 4:		// height
+			this.inst.height = this.initialValue + this.waveFunc(this.i) * this.mag;
+			break;
+		case 5:		// angle
+			if (this.inst.angle !== this.lastKnownValue)
+				this.initialValue = cr.clamp_angle(this.initialValue + (this.inst.angle - this.lastKnownValue));
+			this.inst.angle = cr.clamp_angle(this.initialValue + this.waveFunc(this.i) * this.mag);
+			this.lastKnownValue = this.inst.angle;
+			break;
+		case 6:		// opacity
+			this.inst.opacity = this.initialValue + (this.waveFunc(this.i) * this.mag) / 100;
+			if (this.inst.opacity < 0)
+				this.inst.opacity = 0;
+			else if (this.inst.opacity > 1)
+				this.inst.opacity = 1;
+			break;
+		case 8:		// forwards/backwards
+			if (this.inst.x !== this.lastKnownValue)
+				this.initialValue += this.inst.x - this.lastKnownValue;
+			if (this.inst.y !== this.lastKnownValue2)
+				this.initialValue2 += this.inst.y - this.lastKnownValue2;
+			this.inst.x = this.initialValue + Math.cos(this.inst.angle) * this.waveFunc(this.i) * this.mag;
+			this.inst.y = this.initialValue2 + Math.sin(this.inst.angle) * this.waveFunc(this.i) * this.mag;
+			this.lastKnownValue = this.inst.x;
+			this.lastKnownValue2 = this.inst.y;
+			break;
+		}
+		this.inst.set_bbox_changed();
+	};
+	behinstProto.onSpriteFrameChanged = function (prev_frame, next_frame)
+	{
+		switch (this.movement) {
+		case 2:	// size
+			this.initialValue *= (next_frame.width / prev_frame.width);
+			this.ratio = next_frame.height / next_frame.width;
+			break;
+		case 3:	// width
+			this.initialValue *= (next_frame.width / prev_frame.width);
+			break;
+		case 4:	// height
+			this.initialValue *= (next_frame.height / prev_frame.height);
+			break;
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.IsActive = function ()
+	{
+		return this.active;
+	};
+	Cnds.prototype.CompareMovement = function (m)
+	{
+		return this.movement === m;
+	};
+	Cnds.prototype.ComparePeriod = function (cmp, v)
+	{
+		return cr.do_cmp(this.period, cmp, v);
+	};
+	Cnds.prototype.CompareMagnitude = function (cmp, v)
+	{
+		if (this.movement === 5)
+			return cr.do_cmp(this.mag, cmp, cr.to_radians(v));
+		else
+			return cr.do_cmp(this.mag, cmp, v);
+	};
+	Cnds.prototype.CompareWave = function (w)
+	{
+		return this.wave === w;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetActive = function (a)
+	{
+		this.active = (a === 1);
+	};
+	Acts.prototype.SetPeriod = function (x)
+	{
+		this.period = x;
+	};
+	Acts.prototype.SetMagnitude = function (x)
+	{
+		this.mag = x;
+		if (this.movement === 5)	// angle
+			this.mag = cr.to_radians(this.mag);
+	};
+	Acts.prototype.SetMovement = function (m)
+	{
+		if (this.movement === 5)
+			this.mag = cr.to_degrees(this.mag);
+		this.movement = m;
+		this.init();
+	};
+	Acts.prototype.SetWave = function (w)
+	{
+		this.wave = w;
+	};
+	Acts.prototype.SetPhase = function (x)
+	{
+		this.i = (x * _2pi) % _2pi;
+		this.updateFromPhase();
+	};
+	Acts.prototype.UpdateInitialState = function ()
+	{
+		this.init();
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.CyclePosition = function (ret)
+	{
+		ret.set_float(this.i / _2pi);
+	};
+	Exps.prototype.Period = function (ret)
+	{
+		ret.set_float(this.period);
+	};
+	Exps.prototype.Magnitude = function (ret)
+	{
+		if (this.movement === 5)	// angle
+			ret.set_float(cr.to_degrees(this.mag));
+		else
+			ret.set_float(this.mag);
+	};
+	Exps.prototype.Value = function (ret)
+	{
+		ret.set_float(this.waveFunc(this.i) * this.mag);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.Timer = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.Timer.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.timers = {};
+	};
+	behinstProto.onDestroy = function ()
+	{
+		cr.wipe(this.timers);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		var o = {};
+		var p, t;
+		for (p in this.timers)
+		{
+			if (this.timers.hasOwnProperty(p))
+			{
+				t = this.timers[p];
+				o[p] = {
+					"c": t.current.sum,
+					"t": t.total.sum,
+					"d": t.duration,
+					"r": t.regular
+				};
+			}
+		}
+		return o;
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.timers = {};
+		var p;
+		for (p in o)
+		{
+			if (o.hasOwnProperty(p))
+			{
+				this.timers[p] = {
+					current: new cr.KahanAdder(),
+					total: new cr.KahanAdder(),
+					duration: o[p]["d"],
+					regular: o[p]["r"]
+				};
+				this.timers[p].current.sum = o[p]["c"];
+				this.timers[p].total.sum = o[p]["t"];
+			}
+		}
+	};
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+		var p, t;
+		for (p in this.timers)
+		{
+			if (this.timers.hasOwnProperty(p))
+			{
+				t = this.timers[p];
+				t.current.add(dt);
+				t.total.add(dt);
+			}
+		}
+	};
+	behinstProto.tick2 = function ()
+	{
+		var p, t;
+		for (p in this.timers)
+		{
+			if (this.timers.hasOwnProperty(p))
+			{
+				t = this.timers[p];
+				if (t.current.sum >= t.duration)
+				{
+					if (t.regular)
+						t.current.sum -= t.duration;
+					else
+						delete this.timers[p];
+				}
+			}
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.OnTimer = function (tag_)
+	{
+		tag_ = tag_.toLowerCase();
+		var t = this.timers[tag_];
+		if (!t)
+			return false;
+		return t.current.sum >= t.duration;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.StartTimer = function (duration_, type_, tag_)
+	{
+		this.timers[tag_.toLowerCase()] = {
+			current: new cr.KahanAdder(),
+			total: new cr.KahanAdder(),
+			duration: duration_,
+			regular: (type_ === 1)
+		};
+	};
+	Acts.prototype.StopTimer = function (tag_)
+	{
+		tag_ = tag_.toLowerCase();
+		if (this.timers.hasOwnProperty(tag_))
+			delete this.timers[tag_];
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.CurrentTime = function (ret, tag_)
+	{
+		var t = this.timers[tag_.toLowerCase()];
+		ret.set_float(t ? t.current.sum : 0);
+	};
+	Exps.prototype.TotalTime = function (ret, tag_)
+	{
+		var t = this.timers[tag_.toLowerCase()];
+		ret.set_float(t ? t.total.sum : 0);
+	};
+	Exps.prototype.Duration = function (ret, tag_)
+	{
+		var t = this.timers[tag_.toLowerCase()];
+		ret.set_float(t ? t.duration : 0);
+	};
+	behaviorProto.exps = new Exps();
+}());
+var easeOutBounceArray = [];
+var easeInElasticArray = [];
+var easeOutElasticArray = [];
+var easeInOutElasticArray = [];
+var easeInCircle = [];
+var easeOutCircle = [];
+var easeInOutCircle = [];
+var easeInBack = [];
+var easeOutBack = [];
+var easeInOutBack = [];
+var litetween_precision = 10000;
+var updateLimit = 0; //0.0165;
+function easeOutBouncefunc(t) {
+  var b=0.0;
+  var c=1.0;
+  var d=1.0;
+	if ((t/=d) < (1/2.75)) {
+		result = c*(7.5625*t*t) + b;
+	} else if (t < (2/2.75)) {
+		result = c*(7.5625*(t-=(1.5/2.75))*t + .75) + b;
+	} else if (t < (2.5/2.75)) {
+		result = c*(7.5625*(t-=(2.25/2.75))*t + .9375) + b;
+	} else {
+		result = c*(7.5625*(t-=(2.625/2.75))*t + .984375) + b;
+	}
+  return result;
+}
+function integerize(t, d)
+{
+  return Math.round(t/d*litetween_precision);
+}
+function easeFunc(easing, t, b, c, d, flip, param)
+{
+  var ret_ease = 0;
+  switch (easing) {
+	case 0:		// linear
+		ret_ease = c*t/d + b;
+    break;
+	case 1:		// easeInQuad
+		ret_ease = c*(t/=d)*t + b;
+    break;
+	case 2:		// easeOutQuad
+		ret_ease = -c *(t/=d)*(t-2) + b;
+    break;
+	case 3:		// easeInOutQuad
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t + b
+    else
+		  ret_ease = -c/2 * ((--t)*(t-2) - 1) + b;
+    break;
+	case 4:		// easeInCubic
+		ret_ease = c*(t/=d)*t*t + b;
+    break;
+	case 5:		// easeOutCubic
+		ret_ease = c*((t=t/d-1)*t*t + 1) + b;
+    break;
+	case 6:		// easeInOutCubic
+		if ((t/=d/2) < 1)
+			ret_ease = c/2*t*t*t + b
+    else
+		  ret_ease = c/2*((t-=2)*t*t + 2) + b;
+    break;
+	case 7:		// easeInQuart
+		ret_ease = c*(t/=d)*t*t*t + b;
+    break;
+	case 8:		// easeOutQuart
+		ret_ease = -c * ((t=t/d-1)*t*t*t - 1) + b;
+    break;
+	case 9:		// easeInOutQuart
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t*t*t + b
+    else
+		  ret_ease = -c/2 * ((t-=2)*t*t*t - 2) + b;
+    break;
+	case 10:		// easeInQuint
+		ret_ease = c*(t/=d)*t*t*t*t + b;
+    break;
+	case 11:		// easeOutQuint
+		ret_ease = c*((t=t/d-1)*t*t*t*t + 1) + b;
+    break;
+	case 12:		// easeInOutQuint
+		if ((t/=d/2) < 1)
+      ret_ease = c/2*t*t*t*t*t + b
+    else
+		  ret_ease = c/2*((t-=2)*t*t*t*t + 2) + b;
+    break;
+	case 13:		// easeInCircle
+    if (param.optimized) {
+		  ret_ease = easeInCircle[integerize(t,d)];
+    } else {
+      ret_ease = -(Math.sqrt(1-t*t) - 1);
+    }
+    break;
+	case 14:		// easeOutCircle
+    if (param.optimized) {
+  		ret_ease = easeOutCircle[integerize(t,d)];
+    } else {
+      ret_ease = Math.sqrt(1 - ((t-1)*(t-1)));
+    }
+    break;
+	case 15:		// easeInOutCircle
+    if (param.optimized) {
+  		ret_ease = easeInOutCircle[integerize(t,d)];
+    } else {
+  		if ((t/=d/2) < 1) ret_ease = -c/2 * (Math.sqrt(1 - t*t) - 1) + b
+      else ret_ease = c/2 * (Math.sqrt(1 - (t-=2)*t) + 1) + b;
+    }
+    break;
+	case 16:		// easeInBack
+    if (param.optimized) {
+		  ret_ease = easeInBack[integerize(t,d)];
+    } else {
+  		var s = param.s;
+	  	ret_ease = c*(t/=d)*t*((s+1)*t - s) + b;
+    }
+    break;
+	case 17:		// easeOutBack
+    if (param.optimized) {
+		  ret_ease = easeOutBack[integerize(t,d)];
+    } else {
+   		var s = param.s;
+	  	ret_ease = c*((t=t/d-1)*t*((s+1)*t + s) + 1) + b;
+    }
+    break;
+	case 18:		// easeInOutBack
+    if (param.optimized) {
+		  ret_ease = easeInOutBack[integerize(t,d)];
+    } else {
+      var s = param.s
+  		if ((t/=d/2) < 1)
+        ret_ease = c/2*(t*t*(((s*=(1.525))+1)*t - s)) + b
+      else
+  		  ret_ease = c/2*((t-=2)*t*(((s*=(1.525))+1)*t + s) + 2) + b;
+    }
+    break;
+	case 19:	//easeInElastic
+    if (param.optimized) {
+  		ret_ease = easeInElasticArray[integerize(t, d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+      if (t==0) ret_ease = b; if ((t/=d)==1) ret_ease = b+c;
+      if (p==0) p=d*.3;	if (a==0 || a < Math.abs(c)) { a=c; s=p/4; }
+      else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		ret_ease = -(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b;
+    }
+    break;
+	case 20:	//easeOutElastic
+    if (param.optimized) {
+      ret_ease = easeOutElasticArray[integerize(t,d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+  		if (t==0) ret_ease= b;  if ((t/=d)==1) ret_ease= b+c;  if (p == 0) p=d*.3;
+  		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+  		else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		ret_ease= (a*Math.pow(2,-10*t) * Math.sin( (t*d-s)*(2*Math.PI)/p ) + c + b);
+    }
+    break;
+	case 21:	//easeInOutElastic
+    if (param.optimized) {
+      ret_ease = easeInOutElasticArray[integerize(t,d)];
+    } else {
+      var a = param.a;
+      var p = param.p;
+      var s = 0;
+  		if (t==0) ret_ease = b;
+  		if ((t/=d/2)==2) ret_ease = b+c;
+  		if (p==0) p=d*(.3*1.5);
+  		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+  		else var s = p/(2*Math.PI) * Math.asin (c/a);
+  		if (t < 1)
+        ret_ease = -.5*(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b
+      else
+  		  ret_ease = a*Math.pow(2,-10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )*.5 + c + b;
+    }
+    break;
+	case 22:	//easeInBounce
+    if (param.optimized) {
+  		ret_ease = c - easeOutBounceArray[integerize(d-t, d)] + b;
+    } else {
+  		ret_ease = c - easeOutBouncefunc(d-t/d) + b;
+    }
+    break;
+	case 23:	//easeOutBounce
+    if (param.optimized) {
+  		ret_ease = easeOutBounceArray[integerize(t, d)];
+    } else {
+  		ret_ease = easeOutBouncefunc(t/d);
+    }
+    break;
+	case 24:	//easeInOutBounce
+    if (param.optimized) {
+  		if (t < d/2)
+        ret_ease = (c - easeOutBounceArray[integerize(d-(t*2), d)] + b) * 0.5 +b;
+  		else
+        ret_ease = easeOutBounceArray[integerize(t*2-d, d)] * .5 + c*.5 + b;
+    } else {
+  		if (t < d/2)
+        ret_ease = (c - easeOutBouncefunc(d-(t*2)) + b) * 0.5 +b;
+  		else
+        ret_ease = easeOutBouncefunc((t*2-d)/d) * .5 + c *.5 + b;
+    }
+    break;
+	case 25:	//easeInSmoothstep
+		var mt = (t/d) / 2;
+		ret_ease = (2*(mt * mt * (3 - 2*mt)));
+    break;
+	case 26:	//easeOutSmoothstep
+		var mt = ((t/d) + 1) / 2;
+		ret_ease = ((2*(mt * mt * (3 - 2*mt))) - 1);
+    break;
+	case 27:	//easeInOutSmoothstep
+		var mt = (t / d);
+		ret_ease = (mt * mt * (3 - 2*mt));
+    break;
+	};
+  if (flip)
+    return (c - b) - ret_ease
+  else
+    return ret_ease;
+};
+(function preCalculateArray() {
+  var d = 1.0;
+  var b = 0.0;
+  var c = 1.0;
+  var result = 0.0;
+  var a = 0.0;
+  var p = 0.0;
+  var t = 0.0;
+  var s = 0.0;
+  for (var ti = 0; ti <= litetween_precision; ti++) {
+    t = ti/litetween_precision;
+  	if ((t/=d) < (1/2.75)) {
+  		result = c*(7.5625*t*t) + b;
+  	} else if (t < (2/2.75)) {
+  		result = c*(7.5625*(t-=(1.5/2.75))*t + .75) + b;
+  	} else if (t < (2.5/2.75)) {
+  		result = c*(7.5625*(t-=(2.25/2.75))*t + .9375) + b;
+  	} else {
+  		result = c*(7.5625*(t-=(2.625/2.75))*t + .984375) + b;
+  	}
+    easeOutBounceArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+    if (t==0) result = b; if ((t/=d)==1) result = b+c;
+    if (p==0) p=d*.3;	if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+    else var s = p/(2*Math.PI) * Math.asin (c/a);
+		result = -(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b;
+    easeInElasticArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+		if (t==0) result= b;  if ((t/=d)==1) result= b+c;  if (p == 0) p=d*.3;
+		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+		else var s = p/(2*Math.PI) * Math.asin (c/a);
+		result= (a*Math.pow(2,-10*t) * Math.sin( (t*d-s)*(2*Math.PI)/p ) + c + b);
+    easeOutElasticArray[ti] = result;
+    t = ti/litetween_precision; a = 0; p = 0;
+		if (t==0) result = b;
+		if ((t/=d/2)==2) result = b+c;
+		if (p==0) p=d*(.3*1.5);
+		if (a==0 || a < Math.abs(c)) { a=c; var s=p/4; }
+		else var s = p/(2*Math.PI) * Math.asin (c/a);
+		if (t < 1)
+      result = -.5*(a*Math.pow(2,10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )) + b
+    else
+		  result = a*Math.pow(2,-10*(t-=1)) * Math.sin( (t*d-s)*(2*Math.PI)/p )*.5 + c + b;
+    easeInOutElasticArray[ti] = result;
+    t = ti/litetween_precision; easeInCircle[ti] = -(Math.sqrt(1-t*t) - 1);
+    t = ti/litetween_precision; easeOutCircle[ti] = Math.sqrt(1 - ((t-1)*(t-1)));
+    t = ti/litetween_precision;
+		if ((t/=d/2) < 1) result = -c/2 * (Math.sqrt(1 - t*t) - 1) + b
+    else result = c/2 * (Math.sqrt(1 - (t-=2)*t) + 1) + b;
+    easeInOutCircle[ti] = result;
+    t = ti/litetween_precision; s = 0;
+		if (s==0) s = 1.70158;
+		result = c*(t/=d)*t*((s+1)*t - s) + b;
+    easeInBack[ti] = result;
+    t = ti/litetween_precision; s = 0;
+		if (s==0) s = 1.70158;
+		result = c*((t=t/d-1)*t*((s+1)*t + s) + 1) + b;
+    easeOutBack[ti] = result;
+    t = ti/litetween_precision; s = 0; if (s==0) s = 1.70158;
+		if ((t/=d/2) < 1)
+      result = c/2*(t*t*(((s*=(1.525))+1)*t - s)) + b
+    else
+		  result = c/2*((t-=2)*t*(((s*=(1.525))+1)*t + s) + 2) + b;
+    easeInOutBack[ti] = result;
+	}
+}());
+var TweenObject = function()
+{
+	var constructor = function (tname, tweened, easefunc, initial, target, duration, enforce)
+	{
+    this.name = tname;
+    this.value = 0;
+    this.setInitial(initial);
+    this.setTarget(target);
+    this.easefunc = easefunc;
+    this.tweened = tweened;
+    this.duration = duration;
+    this.progress = 0;
+    this.state = 0;
+    this.onStart = false;
+    this.onEnd = false;
+    this.onReverseStart = false;
+    this.onReverseEnd = false;
+    this.lastKnownValue = 0;
+    this.lastKnownValue2 = 0;
+    this.enforce = enforce;
+    this.pingpong = 1.0;
+    this.flipEase = false;
+    this.easingparam = [];
+    this.lastState = 1;
+    for (var i=0; i<28; i++) {
+      this.easingparam[i] = {};
+      this.easingparam[i].a = 0.0;
+      this.easingparam[i].p = 0.0;
+      this.easingparam[i].t = 0.0;
+      this.easingparam[i].s = 0.0;
+      this.easingparam[i].optimized = true;
+    }
+	}
+	return constructor;
+}();
+(function () {
+	TweenObject.prototype = {
+	};
+  TweenObject.prototype.flipTarget = function ()
+  {
+    var x1 = this.initialparam1;
+    var x2 = this.initialparam2;
+    this.initialparam1 = this.targetparam1;
+    this.initialparam2 = this.targetparam2;
+    this.targetparam1 = x1;
+    this.targetparam2 = x2;
+    this.lastKnownValue = 0;
+    this.lastKnownValue2 = 0;
+  }
+  TweenObject.prototype.setInitial = function (initial)
+  {
+    this.initialparam1 = parseFloat(initial.split(",")[0]);
+    this.initialparam2 = parseFloat(initial.split(",")[1]);
+		this.lastKnownValue = 0;
+		this.lastKnownValue2 = 0;
+  }
+  TweenObject.prototype.setTarget = function (target)
+  {
+    this.targetparam1 = parseFloat(target.split(",")[0]);
+    this.targetparam2 = parseFloat(target.split(",")[1]);
+    if (isNaN(this.targetparam2)) this.targetparam2 = this.targetparam1;
+  }
+  TweenObject.prototype.OnTick = function(dt)
+  {
+    if (this.state === 0) return -1.0;
+    if (this.state === 1)
+      this.progress += dt;
+    if (this.state === 2)
+      this.progress -= dt;
+    if (this.state === 3) {
+      this.state = 0;
+    }
+    if ((this.state === 4) || (this.state === 6)) {
+      this.progress += dt * this.pingpong;
+    }
+    if (this.state === 5) {
+      this.progress += dt * this.pingpong;
+    }
+    if (this.progress < 0) {
+      this.progress = 0;
+      if (this.state === 4) {
+        this.pingpong = 1;
+      } else if (this.state === 6) {
+        this.pingpong = 1;
+        this.flipEase = false;
+      } else {
+        this.state = 0;
+      }
+      this.onReverseEnd = true;
+      return 0.0;
+    } else if (this.progress > this.duration) {
+      this.progress = this.duration;
+      if (this.state === 4) {
+        this.pingpong = -1;
+      } else if (this.state === 6) {
+        this.pingpong = -1;
+        this.flipEase = true;
+      } else if (this.state === 5) {
+        this.progress = 0.0;
+      } else {
+        this.state = 0;
+      }
+      this.onEnd = true;
+      return 1.0;
+    } else {
+      if (this.flipEase) {
+        var factor = easeFunc(this.easefunc, this.duration - this.progress, 0, 1, this.duration, this.flipEase, this.easingparam[this.easefunc]);
+      } else {
+        var factor = easeFunc(this.easefunc, this.progress, 0, 1, this.duration, this.flipEase, this.easingparam[this.easefunc]);
+      }
+      return factor;
+    }
+  };
+}());
+;
+;
+function trim (str) {
+    return str.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+}
+cr.behaviors.lunarray_LiteTween = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.lunarray_LiteTween.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.i = 0;		// progress
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+    this.playmode = this.properties[0];
+    this.active = (this.playmode == 1) || (this.playmode == 2) || (this.playmode == 3) || (this.playmode == 4);
+		this.tweened = this.properties[1]; // 0=Position|1=Size|2=Width|3=Height|4=Angle|5=Opacity|6=Value only|7=Horizontal|8=Vertical|9=Scale
+		this.easing = this.properties[2];
+		this.target = this.properties[3];
+		this.targetmode = this.properties[4];
+    this.useCurrent = false;
+    if (this.targetmode === 1) this.target = "relative("+this.target+")";
+		this.duration = this.properties[5];
+		this.enforce = (this.properties[6] === 1);
+    this.value = 0;
+    this.tween_list = {};
+    this.addToTweenList("default", this.tweened, this.easing, "current", this.target, this.duration, this.enforce);
+    if (this.properties[0] === 1) this.startTween(0)
+    if (this.properties[0] === 2) this.startTween(2)
+    if (this.properties[0] === 3) this.startTween(3)
+    if (this.properties[0] === 4) this.startTween(4)
+	};
+	behinstProto.parseCurrent = function(tweened, parseText)
+  {
+    if (parseText === undefined) parseText = "current";
+    var parsed = trim(parseText);
+    parseText = trim(parseText);
+    var value = this.value;
+    if (parseText === "current") {
+      switch (tweened) {
+        case 0: parsed = this.inst.x + "," + this.inst.y; break;
+        case 1: parsed = this.inst.width + "," + this.inst.height; break;
+        case 2: parsed = this.inst.width + "," + this.inst.height; break;
+        case 3: parsed = this.inst.width + "," + this.inst.height; break;
+        case 4: parsed = cr.to_degrees(this.inst.angle) + "," + cr.to_degrees(this.inst.angle); break;
+        case 5: parsed = (this.inst.opacity*100) + "," + (this.inst.opacity*100); break;
+        case 6: parsed = value + "," + value; break;
+        case 7: parsed = this.inst.x + "," + this.inst.y; break;
+        case 8: parsed = this.inst.x + "," + this.inst.y; break;
+        case 9:
+          if (this.inst.curFrame !== undefined)
+            parsed = (this.inst.width/this.inst.curFrame.width) + "," +(this.inst.height/this.inst.curFrame.height)
+          else
+            parsed = "1,1";
+          break;
+        default:  break;
+      }
+    }
+    if (parseText.substring(0,8) === "relative") {
+      var param1 = parseText.match(/\((.*?)\)/);
+      if (param1) {
+        var relativex = parseFloat(param1[1].split(",")[0]);
+        var relativey = parseFloat(param1[1].split(",")[1]);
+      }
+      if (isNaN(relativex)) relativex = 0;
+      if (isNaN(relativey)) relativey = 0;
+      switch (tweened) {
+        case 0: parsed = (this.inst.x+relativex) + "," + (this.inst.y+relativey); break;
+        case 1: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 2: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 3: parsed = (this.inst.width+relativex) + "," + (this.inst.height+relativey); break;
+        case 4: parsed = (cr.to_degrees(this.inst.angle)+relativex) + "," + (cr.to_degrees(this.inst.angle)+relativey); break;
+        case 5: parsed = (this.inst.opacity*100+relativex) + "," + (this.inst.opacity*100+relativey); break;
+        case 6: parsed = value+relativex + "," + value+relativex; break;
+        case 7: parsed = (this.inst.x+relativex) + "," + (this.inst.y); break;
+        case 8: parsed = (this.inst.x) + "," + (this.inst.y+relativex); break;
+        case 9: parsed = (relativex) + "," + (relativey); break;
+        default:  break;
+      }
+    }
+    return parsed;
+  };
+	behinstProto.addToTweenList = function(tname, tweened, easing, init, targ, duration, enforce)
+  {
+    init = this.parseCurrent(tweened, init);
+    targ = this.parseCurrent(tweened, targ);
+    if (this.tween_list[tname] !== undefined) {
+      delete this.tween_list[tname]
+    }
+    this.tween_list[tname] = new TweenObject(tname, tweened, easing, init, targ, duration, enforce);
+    this.tween_list[tname].dt = 0;
+  };
+	behinstProto.saveToJSON = function ()
+	{
+    var v = JSON.stringify(this.tween_list["default"]);
+		return {
+			"playmode": this.playmode,
+			"active": this.active,
+			"tweened": this.tweened,
+			"easing": this.easing,
+			"target": this.target,
+			"targetmode": this.targetmode,
+			"useCurrent": this.useCurrent,
+			"duration": this.duration,
+			"enforce": this.enforce,
+			"value": this.value,
+			"tweenlist": JSON.stringify(this.tween_list["default"])
+		};
+	};
+  TweenObject.Load = function(rawObj, tname, tweened, easing, init, targ, duration, enforce)
+  {
+    var obj = new TweenObject(tname, tweened, easing, init, targ, duration, enforce);
+    for(var i in rawObj)
+        obj[i] = rawObj[i];
+    return obj;
+  };
+	behinstProto.loadFromJSON = function (o)
+	{
+    var x = JSON.parse(o["tweenlist"]);
+    var tempObj = TweenObject.Load(x, x.name, x.tweened, x.easefunc, x.initialparam1+","+x.initialparam2, x.targetparam1+","+x.targetparam2, x.duration, x.enforce);
+		this.tween_list["default"] = tempObj;
+	  this.playmode = o["playmode"];
+		this.active = o["active"];
+		this.movement = o["tweened"];
+		this.easing = o["easing"];
+		this.target = o["target"];
+		this.targetmode = o["targetmode"];
+		this.useCurrent = o["useCurrent"];
+		this.duration = o["duration"];
+		this.enforce = o["enforce"];
+		this.value = o["value"];
+	};
+	behinstProto.setProgressTo = function (mark)
+	{
+    if (mark > 1.0) mark = 1.0;
+    if (mark < 0.0) mark = 0.0;
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      inst.lastKnownValue = 0;
+      inst.lastKnownValue2 = 0;
+      inst.state = 3;
+      inst.progress = mark * inst.duration;
+      var factor = inst.OnTick(0);
+      this.updateTween(inst, factor);
+    }
+  }
+	behinstProto.startTween = function (startMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if (this.useCurrent) {
+        var init = this.parseCurrent(inst.tweened, "current");
+        var target = this.parseCurrent(inst.tweened, this.target);
+        inst.setInitial(init);
+        inst.setTarget(target);
+      }
+      if (startMode === 0) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        inst.state = 1;
+      }
+      if (startMode === 1) {
+        inst.state = inst.lastState;
+      }
+      if ((startMode === 2) || (startMode === 4)) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        if (startMode == 2) inst.state = 4; //state ping pong
+        if (startMode == 4) inst.state = 6; //state flip flop
+      }
+      if (startMode === 3) {
+        inst.progress = 0.000001;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onStart = true;
+        inst.state = 5;
+      }
+    }
+  }
+	behinstProto.stopTween = function (stopMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if ((inst.state != 3) && (inst.state != 0)) //don't save paused/seek state
+        inst.lastState = inst.state;
+      if (stopMode === 1) inst.progress = 0.0;
+      if (stopMode === 2) inst.progress = inst.duration;
+      inst.state = 3;
+      var factor = inst.OnTick(0);
+      this.updateTween(inst, factor);
+    }
+  }
+	behinstProto.reverseTween = function(reverseMode)
+	{
+    for (var i in this.tween_list) {
+      var inst = this.tween_list[i];
+      if (reverseMode === 1) {
+        inst.progress = inst.duration;
+        inst.lastKnownValue = 0;
+        inst.lastKnownValue2 = 0;
+        inst.onReverseStart = true;
+      }
+      inst.state = 2;
+    }
+  }
+	behinstProto.updateTween = function (inst, factor)
+	{
+    if (inst.tweened === 0) {
+      if (inst.enforce) {
+	      this.inst.x = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+        this.inst.y = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      } else {
+        this.inst.x += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        this.inst.y += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 1) {
+      if (inst.enforce) {
+  			this.inst.width = (inst.initialparam1 + ((inst.targetparam1 - inst.initialparam1) * (factor)));
+	   		this.inst.height = (inst.initialparam2 + ((inst.targetparam2 - inst.initialparam2) * (factor)));
+      } else {
+       	this.inst.width +=  ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+      	this.inst.height += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 2) {
+      if (inst.enforce) {
+  			this.inst.width = (inst.initialparam1 + ((inst.targetparam1 - inst.initialparam1) * (factor)));
+      } else {
+      	this.inst.width += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 3) {
+      if (inst.enforce) {
+	   		this.inst.height = (inst.initialparam2 + ((inst.targetparam2 - inst.initialparam2) * (factor)));
+      } else {
+      	this.inst.height += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 4) {
+      if (inst.enforce) {
+  		  var tangle = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+  		  this.inst.angle = cr.clamp_angle(cr.to_radians(tangle));
+      } else {
+  		  var tangle = ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+  		  this.inst.angle = cr.clamp_angle(this.inst.angle + cr.to_radians(tangle));
+        inst.lastKnownValue = (inst.targetparam1 - inst.initialparam1) * factor;
+      }
+    } else if (inst.tweened === 5) {
+      if (inst.enforce) {
+  		  this.inst.opacity = (inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor) / 100;
+      } else {
+  		  this.inst.opacity += (((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue) / 100;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 6) {
+      if (inst.enforce) {
+  		  this.value = (inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor);
+      } else {
+  		  this.value += (((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue);
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 7) {
+      if (inst.enforce) {
+	      this.inst.x = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+      } else {
+        this.inst.x += ((inst.targetparam1 - inst.initialparam1) * factor) - inst.lastKnownValue;
+        inst.lastKnownValue = ((inst.targetparam1 - inst.initialparam1) * factor);
+      }
+    } else if (inst.tweened === 8) {
+      if (inst.enforce) {
+        this.inst.y = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      } else {
+        this.inst.y += ((inst.targetparam2 - inst.initialparam2) * factor) - inst.lastKnownValue2;
+        inst.lastKnownValue2 = ((inst.targetparam2 - inst.initialparam2) * factor);
+      }
+    } else if (inst.tweened === 9) {
+      var scalex = inst.initialparam1 + (inst.targetparam1 - inst.initialparam1) * factor;
+      var scaley = inst.initialparam2 + (inst.targetparam2 - inst.initialparam2) * factor;
+      if (this.inst.width < 0) scalex = inst.initialparam1 + (inst.targetparam1 + inst.initialparam1) * -factor;
+      if (this.inst.height < 0)  scaley = inst.initialparam2 + (inst.targetparam2 + inst.initialparam2) * -factor;
+      if (inst.enforce) {
+        this.inst.width = this.inst.curFrame.width * scalex;
+        this.inst.height = this.inst.curFrame.height * scaley;
+      } else {
+        if (this.inst.width < 0) {
+      	  this.inst.width = scalex * (this.inst.width / (-1+inst.lastKnownValue));
+          inst.lastKnownValue = scalex + 1
+        } else {
+      	  this.inst.width = scalex * (this.inst.width / (1+inst.lastKnownValue));
+          inst.lastKnownValue = scalex - 1;
+        }
+        if (this.inst.height < 0) {
+          this.inst.height = scaley * (this.inst.height / (-1+inst.lastKnownValue2));
+          inst.lastKnownValue2 = scaley + 1
+        } else {
+          this.inst.height = scaley * (this.inst.height / (1+inst.lastKnownValue2));
+          inst.lastKnownValue2 = scaley - 1;
+        }
+      }
+    }
+    this.inst.set_bbox_changed();
+  }
+	behinstProto.tick = function ()
+	{
+		var dt = this.runtime.getDt(this.inst);
+    var inst = this.tween_list["default"];
+    if (inst.state !== 0) {
+      if (inst.onStart) {
+  			this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnStart, this.inst);
+        inst.onStart = false;
+      }
+      if (inst.onReverseStart) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnReverseStart, this.inst);
+        inst.onReverseStart = false;
+      }
+      this.active = (inst.state == 1) || (inst.state == 2) || (inst.state == 4) || (inst.state == 5) || (inst.state == 6);
+      var factor = inst.OnTick(dt);
+      this.updateTween(inst, factor);
+      if (inst.onEnd) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnEnd, this.inst);
+        inst.onEnd = false;
+      }
+      if (inst.onReverseEnd) {
+  		  this.runtime.trigger(cr.behaviors.lunarray_LiteTween.prototype.cnds.OnReverseEnd, this.inst);
+        inst.onReverseEnd = false;
+      }
+    }
+	};
+	behaviorProto.cnds = {};
+	var cnds = behaviorProto.cnds;
+	cnds.IsActive = function ()
+	{
+		return (this.tween_list["default"].state !== 0);
+	};
+	cnds.IsReversing = function ()
+	{
+		return (this.tween_list["default"].state == 2);
+	};
+	cnds.CompareProgress = function (cmp, v)
+	{
+    var inst = this.tween_list["default"];
+		return cr.do_cmp((inst.progress / inst.duration), cmp, v);
+	};
+	cnds.OnThreshold = function (cmp, v)
+	{
+    var inst = this.tween_list["default"];
+    this.threshold = (cr.do_cmp((inst.progress / inst.duration), cmp, v));
+    var ret = (this.oldthreshold != this.threshold) && (this.threshold);
+    if (ret) {
+      this.oldthreshold = this.threshold;
+    }
+		return ret;
+	};
+	cnds.OnStart = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onStart;
+	};
+	cnds.OnReverseStart = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onReverseStart;
+	};
+  cnds.OnEnd = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onEnd;
+	};
+  cnds.OnReverseEnd = function ()
+	{
+    if (this.tween_list["default"] === undefined)
+      return false;
+    return this.tween_list["default"].onReverseEnd;
+	};
+	behaviorProto.acts = {};
+	var acts = behaviorProto.acts;
+	acts.Start = function (startmode, current)
+	{
+    this.threshold = false;
+    this.oldthreshold = false;
+    this.useCurrent = (current == 1);
+    this.startTween(startmode);
+	};
+	acts.Stop = function (stopmode)
+	{
+    this.stopTween(stopmode);
+	};
+	acts.Reverse = function (revMode)
+	{
+    this.threshold = false;
+    this.oldthreshold = false;
+    this.reverseTween(revMode);
+	};
+ 	acts.ProgressTo = function (progress)
+	{
+    this.setProgressTo(progress);
+	};
+	acts.SetDuration = function (x)
+	{
+    if (isNaN(x)) return;
+    if (x < 0) return;
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].duration = x;
+	};
+	acts.SetEnforce = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].enforce = (x===1);
+	};
+	acts.SetInitial = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    var init = this.parseCurrent(this.tween_list["default"].tweened, x);
+		this.tween_list["default"].setInitial(init);
+	};
+	acts.SetTarget = function (targettype, absrel, x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    if (isNaN(x)) return;
+    var inst = this.tween_list["default"];
+    var parsed = x + "";
+    this.targetmode = absrel;
+    var x1 = "";
+    var x2 = "";
+    if (absrel === 1) {
+      this.target = "relative(" + parsed + ")";
+      switch (targettype) {
+        case 0: x1 = (this.inst.x + x); x2 = inst.targetparam2; break;
+        case 1: x1 = inst.targetparam1; x2 = (this.inst.y + x); break;
+        case 2: x1 = "" + cr.to_degrees(this.inst.angle + cr.to_radians(x)); x2 = x1; break; //angle
+        case 3: x1 = "" + (this.inst.opacity*100) + x; x2 = x1; break; //opacity
+        case 4: x1 = (this.inst.width + x); x2 = inst.targetparam2; break; //width
+        case 5: x1 = inst.targetparam1; x2 = (this.inst.height + x); break; //height
+        case 6: x1 = x; x2 = x; break; //value
+        default:  break;
+      }
+      parsed = x1 + "," + x2;
+    } else {
+      switch (targettype) {
+        case 0: x1 = x; x2 = inst.targetparam2; break;
+        case 1: x1 = inst.targetparam1; x2 = x; break;
+        case 2: x1 = x; x2 = x; break; //angle
+        case 3: x1 = x; x2 = x; break; //opacity
+        case 4: x1 = x; x2 = inst.targetparam2; break; //width
+        case 5: x1 = inst.targetparam1; x2 = x; break; //height
+        case 6: x1 = x; x2 = x; break; //value
+        default:  break;
+      }
+      parsed = x1 + "," + x2;
+      this.target = parsed;
+    }
+    var init = this.parseCurrent(this.tween_list["default"].tweened, "current");
+    var targ = this.parseCurrent(this.tween_list["default"].tweened, parsed);
+ 		inst.setInitial(init);
+ 		inst.setTarget(targ);
+	};
+	acts.SetTweenedProperty = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].tweened = x;
+	};
+	acts.SetEasing = function (x)
+	{
+    if (this.tween_list["default"] === undefined) return;
+		this.tween_list["default"].easefunc = x;
+	};
+ 	acts.SetEasingParam = function (x, a, p, t, s)
+	{
+    if (this.tween_list["default"] === undefined) return;
+    this.tween_list["default"].easingparam[x].optimized = false;
+		this.tween_list["default"].easingparam[x].a = a;
+		this.tween_list["default"].easingparam[x].p = p;
+		this.tween_list["default"].easingparam[x].t = t;
+		this.tween_list["default"].easingparam[x].s = s;
+	};
+ 	acts.ResetEasingParam = function ()
+	{
+    if (this.tween_list["default"] === undefined) return;
+    this.tween_list["default"].optimized = true;
+	};
+ 	acts.SetValue = function (x)
+	{
+    var inst = this.tween_list["default"];
+		this.value = x;
+    if (inst.tweened === 6)
+      inst.setInitial( this.parseCurrent(inst.tweened, "current") );
+	};
+	acts.SetParameter = function (tweened, easefunction, target, duration, enforce)
+	{
+    if (this.tween_list["default"] === undefined) {
+      this.addToTweenList("default", tweened, easefunction, initial, target, duration, enforce, 0);
+    } else {
+      var inst = this.tween_list["default"];
+      inst.tweened = tweened;
+  		inst.easefunc = easefunction;
+      inst.setInitial( this.parseCurrent(tweened, "current") );
+      inst.setTarget( this.parseCurrent(tweened, target) );
+      inst.duration = duration;
+      inst.enforce = (enforce === 1);
+    }
+	};
+	behaviorProto.exps = {};
+	var exps = behaviorProto.exps;
+	exps.State = function (ret)
+	{
+    var parsed = "N/A";
+    switch (this.tween_list["default"].state) {
+      case 0: parsed = "paused"; break;
+      case 1: parsed = "playing"; break;
+      case 2: parsed = "reversing"; break;
+      case 3: parsed = "seeking"; break;
+      default:  break;
+    }
+    ret.set_string(parsed);
+	};
+	exps.Progress = function (ret)
+	{
+    var progress = this.tween_list["default"].progress/this.tween_list["default"].duration;
+    ret.set_float(progress);
+	};
+	exps.Duration = function (ret)
+	{
+    ret.set_float(this.tween_list["default"].duration);
+	};
+	exps.Target = function (ret)
+	{
+    var inst = this.tween_list["default"];
+    var parsed = "N/A";
+    switch (inst.tweened) {
+      case 0: parsed = inst.targetparam1; break;
+      case 1: parsed = inst.targetparam2; break;
+      case 2: parsed = inst.targetparam1; break;
+      case 3: parsed = inst.targetparam1; break;
+      case 4: parsed = inst.targetparam1; break;
+      case 5: parsed = inst.targetparam2; break;
+      case 6: parsed = inst.targetparam1; break;
+      default:  break;
+    }
+    ret.set_float(parsed);
+	};
+	exps.Value = function (ret)
+	{
+    var tval = this.value;
+    ret.set_float(tval);
+	};
+	exps.Tween = function (ret, a_, b_, x_, easefunc_)
+	{
+    var currX = (x_>1.0?1.0:x_);
+    var factor = easeFunc(easefunc_, currX<0.0?0.0:currX, 0.0, 1.0, 1.0, false, false);
+    ret.set_float(a_ + factor * (b_-a_));
+	};
+}());
+(function(){
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+Object.create = Object.create || function(o) {
+	function F() {}
+	F.prototype = o;
+	return new F();
+};
+var cp;
+if(typeof exports === 'undefined'){
+	cp = {};
+	if(typeof window === 'object'){
+		window["cp"] = cp;
+	}
+} else {
+	cp = exports;
+}
+var assert = function(value, message)
+{
+	if (!value) {
+		throw new Error('Assertion failed: ' + message);
+	}
+};
+var assertSoft = function(value, message)
+{
+	if(!value && console && console.warn) {
+		console.warn("ASSERTION FAILED: " + message);
+		if(console.trace) {
+			console.trace();
+		}
+	}
+};
+var mymin = function(a, b)
+{
+	return a < b ? a : b;
+};
+var mymax = function(a, b)
+{
+	return a > b ? a : b;
+};
+var min, max;
+if (typeof window === 'object' && window.navigator.userAgent.indexOf('Firefox') > -1){
+	min = Math.min;
+	max = Math.max;
+} else {
+	min = mymin;
+	max = mymax;
+}
+/* The hashpair function takes two numbers and returns a hash code for them.
+ * Required that hashPair(a, b) === hashPair(b, a).
+ * Chipmunk's hashPair function is defined as:
+ *   #define CP_HASH_COEF (3344921057ul)
+ *   #define CP_HASH_PAIR(A, B) ((cpHashValue)(A)*CP_HASH_COEF ^ (cpHashValue)(B)*CP_HASH_COEF)
+ * But thats not suitable in javascript because multiplying by a large number will make the number
+ * a large float.
+ *
+ * The result of hashPair is used as the key in objects, so it returns a string.
+ */
+var hashPair = function(a, b)
+{
+	return a < b ? a + ' ' + b : b + ' ' + a;
+};
+var deleteObjFromList = function(arr, obj)
+{
+	for(var i=0; i<arr.length; i++){
+		if(arr[i] === obj){
+			arr[i] = arr[arr.length - 1];
+			arr.length--;
+			return;
+		}
+	}
+};
+var closestPointOnSegment = function(p, a, b)
+{
+	var delta = vsub(a, b);
+	var t = clamp01(vdot(delta, vsub(p, b))/vlengthsq(delta));
+	return vadd(b, vmult(delta, t));
+};
+var closestPointOnSegment2 = function(px, py, ax, ay, bx, by)
+{
+	var deltax = ax - bx;
+	var deltay = ay - by;
+	var t = clamp01(vdot2(deltax, deltay, px - bx, py - by)/vlengthsq2(deltax, deltay));
+	return new Vect(bx + deltax * t, by + deltay * t);
+};
+cp.momentForCircle = function(m, r1, r2, offset)
+{
+	return m*(0.5*(r1*r1 + r2*r2) + vlengthsq(offset));
+};
+cp.areaForCircle = function(r1, r2)
+{
+	return Math.PI*Math.abs(r1*r1 - r2*r2);
+};
+cp.momentForSegment = function(m, a, b)
+{
+	var offset = vmult(vadd(a, b), 0.5);
+	return m*(vdistsq(b, a)/12 + vlengthsq(offset));
+};
+cp.areaForSegment = function(a, b, r)
+{
+	return r*(Math.PI*r + 2*vdist(a, b));
+};
+cp.momentForPoly = function(m, verts, offset)
+{
+	var sum1 = 0;
+	var sum2 = 0;
+	var len = verts.length;
+	for(var i=0; i<len; i+=2){
+		var v1x = verts[i] + offset.x;
+	 	var v1y = verts[i+1] + offset.y;
+		var v2x = verts[(i+2)%len] + offset.x;
+		var v2y = verts[(i+3)%len] + offset.y;
+		var a = vcross2(v2x, v2y, v1x, v1y);
+		var b = vdot2(v1x, v1y, v1x, v1y) + vdot2(v1x, v1y, v2x, v2y) + vdot2(v2x, v2y, v2x, v2y);
+		sum1 += a*b;
+		sum2 += a;
+	}
+	return (m*sum1)/(6*sum2);
+};
+cp.areaForPoly = function(verts)
+{
+	var area = 0;
+	for(var i=0, len=verts.length; i<len; i+=2){
+		area += vcross(new Vect(verts[i], verts[i+1]), new Vect(verts[(i+2)%len], verts[(i+3)%len]));
+	}
+	return -area/2;
+};
+cp.centroidForPoly = function(verts)
+{
+	var sum = 0;
+	var vsum = new Vect(0,0);
+	for(var i=0, len=verts.length; i<len; i+=2){
+		var v1 = new Vect(verts[i], verts[i+1]);
+		var v2 = new Vect(verts[(i+2)%len], verts[(i+3)%len]);
+		var cross = vcross(v1, v2);
+		sum += cross;
+		vsum = vadd(vsum, vmult(vadd(v1, v2), cross));
+	}
+	return vmult(vsum, 1/(3*sum));
+};
+cp.recenterPoly = function(verts)
+{
+	var centroid = cp.centroidForPoly(verts);
+	for(var i=0; i<verts.length; i+=2){
+		verts[i] -= centroid.x;
+		verts[i+1] -= centroid.y;
+	}
+};
+cp.momentForBox = function(m, width, height)
+{
+	return m*(width*width + height*height)/12;
+};
+cp.momentForBox2 = function(m, box)
+{
+	var width = box.r - box.l;
+	var height = box.t - box.b;
+	var offset = vmult([box.l + box.r, box.b + box.t], 0.5);
+	return cp.momentForBox(m, width, height) + m*vlengthsq(offset);
+};
+var loopIndexes = cp.loopIndexes = function(verts)
+{
+	var start = 0, end = 0;
+	var minx, miny, maxx, maxy;
+	minx = maxx = verts[0];
+	miny = maxy = verts[1];
+	var count = verts.length >> 1;
+  for(var i=1; i<count; i++){
+		var x = verts[i*2];
+		var y = verts[i*2 + 1];
+    if(x < minx || (x == minx && y < miny)){
+			minx = x;
+			miny = y;
+      start = i;
+    } else if(x > maxx || (x == maxx && y > maxy)){
+			maxx = x;
+			maxy = y;
+			end = i;
+		}
+	}
+	return [start, end];
+};
+var SWAP = function(arr, idx1, idx2)
+{
+	var tmp = arr[idx1*2];
+	arr[idx1*2] = arr[idx2*2];
+	arr[idx2*2] = tmp;
+	tmp = arr[idx1*2+1];
+	arr[idx1*2+1] = arr[idx2*2+1];
+	arr[idx2*2+1] = tmp;
+};
+var QHullPartition = function(verts, offs, count, a, b, tol)
+{
+	if(count === 0) return 0;
+	var max = 0;
+	var pivot = offs;
+	var delta = vsub(b, a);
+	var valueTol = tol * vlength(delta);
+	var head = offs;
+	for(var tail = offs+count-1; head <= tail;){
+		var v = new Vect(verts[head * 2], verts[head * 2 + 1]);
+		var value = vcross(delta, vsub(v, a));
+		if(value > valueTol){
+			if(value > max){
+				max = value;
+				pivot = head;
+			}
+			head++;
+		} else {
+			SWAP(verts, head, tail);
+			tail--;
+		}
+	}
+	if(pivot != offs) SWAP(verts, offs, pivot);
+	return head - offs;
+};
+var QHullReduce = function(tol, verts, offs, count, a, pivot, b, resultPos)
+{
+	if(count < 0){
+		return 0;
+	} else if(count == 0) {
+		verts[resultPos*2] = pivot.x;
+		verts[resultPos*2+1] = pivot.y;
+		return 1;
+	} else {
+		var left_count = QHullPartition(verts, offs, count, a, pivot, tol);
+		var left = new Vect(verts[offs*2], verts[offs*2+1]);
+		var index = QHullReduce(tol, verts, offs + 1, left_count - 1, a, left, pivot, resultPos);
+		var pivotPos = resultPos + index++;
+		verts[pivotPos*2] = pivot.x;
+		verts[pivotPos*2+1] = pivot.y;
+		var right_count = QHullPartition(verts, offs + left_count, count - left_count, pivot, b, tol);
+		var right = new Vect(verts[(offs+left_count)*2], verts[(offs+left_count)*2+1]);
+		return index + QHullReduce(tol, verts, offs + left_count + 1, right_count - 1, pivot, right, b, resultPos + index);
+	}
+};
+cp.convexHull = function(verts, result, tolerance)
+{
+	if(result){
+		for (var i = 0; i < verts.length; i++){
+			result[i] = verts[i];
+		}
+	} else {
+		result = verts;
+	}
+	var indexes = loopIndexes(verts);
+	var start = indexes[0], end = indexes[1];
+	if(start == end){
+		result.length = 2;
+		return result;
+	}
+	SWAP(result, 0, start);
+	SWAP(result, 1, end == 0 ? start : end);
+	var a = new Vect(result[0], result[1]);
+	var b = new Vect(result[2], result[3]);
+	var count = verts.length >> 1;
+	var resultCount = QHullReduce(tolerance, result, 2, count - 2, a, b, a, 1) + 1;
+	result.length = resultCount*2;
+	assertSoft(polyValidate(result),
+		"Internal error: cpConvexHull() and cpPolyValidate() did not agree." +
+		"Please report this error with as much info as you can.");
+	return result;
+};
+var clamp = function(f, minv, maxv)
+{
+	return min(max(f, minv), maxv);
+};
+var clamp01 = function(f)
+{
+	return max(0, min(f, 1));
+};
+var lerp = function(f1, f2, t)
+{
+	return f1*(1 - t) + f2*t;
+};
+var lerpconst = function(f1, f2, d)
+{
+	return f1 + clamp(f2 - f1, -d, d);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var Vect = cp.Vect = function(x, y)
+{
+	this.x = x;
+	this.y = y;
+};
+cp.v = function (x,y) { return new Vect(x, y) };
+var vzero = cp.vzero = new Vect(0,0);
+var vdot = cp.v.dot = function(v1, v2)
+{
+	return v1.x*v2.x + v1.y*v2.y;
+};
+var vdot2 = function(x1, y1, x2, y2)
+{
+	return x1*x2 + y1*y2;
+};
+var vlength = cp.v.len = function(v)
+{
+	return Math.sqrt(vdot(v, v));
+};
+var vlength2 = cp.v.len2 = function(x, y)
+{
+	return Math.sqrt(x*x + y*y);
+};
+var veql = cp.v.eql = function(v1, v2)
+{
+	return (v1.x === v2.x && v1.y === v2.y);
+};
+var vadd = cp.v.add = function(v1, v2)
+{
+	return new Vect(v1.x + v2.x, v1.y + v2.y);
+};
+Vect.prototype.add = function(v2)
+{
+	this.x += v2.x;
+	this.y += v2.y;
+	return this;
+};
+var vsub = cp.v.sub = function(v1, v2)
+{
+	return new Vect(v1.x - v2.x, v1.y - v2.y);
+};
+Vect.prototype.sub = function(v2)
+{
+	this.x -= v2.x;
+	this.y -= v2.y;
+	return this;
+};
+var vneg = cp.v.neg = function(v)
+{
+	return new Vect(-v.x, -v.y);
+};
+Vect.prototype.neg = function()
+{
+	this.x = -this.x;
+	this.y = -this.y;
+	return this;
+};
+var vmult = cp.v.mult = function(v, s)
+{
+	return new Vect(v.x*s, v.y*s);
+};
+Vect.prototype.mult = function(s)
+{
+	this.x *= s;
+	this.y *= s;
+	return this;
+};
+var vcross = cp.v.cross = function(v1, v2)
+{
+	return v1.x*v2.y - v1.y*v2.x;
+};
+var vcross2 = function(x1, y1, x2, y2)
+{
+	return x1*y2 - y1*x2;
+};
+var vperp = cp.v.perp = function(v)
+{
+	return new Vect(-v.y, v.x);
+};
+var vpvrperp = cp.v.pvrperp = function(v)
+{
+	return new Vect(v.y, -v.x);
+};
+var vproject = cp.v.project = function(v1, v2)
+{
+	return vmult(v2, vdot(v1, v2)/vlengthsq(v2));
+};
+Vect.prototype.project = function(v2)
+{
+	this.mult(vdot(this, v2) / vlengthsq(v2));
+	return this;
+};
+var vrotate = cp.v.rotate = function(v1, v2)
+{
+	return new Vect(v1.x*v2.x - v1.y*v2.y, v1.x*v2.y + v1.y*v2.x);
+};
+Vect.prototype.rotate = function(v2)
+{
+	this.x = this.x * v2.x - this.y * v2.y;
+	this.y = this.x * v2.y + this.y * v2.x;
+	return this;
+};
+var vunrotate = cp.v.unrotate = function(v1, v2)
+{
+	return new Vect(v1.x*v2.x + v1.y*v2.y, v1.y*v2.x - v1.x*v2.y);
+};
+var vlengthsq = cp.v.lengthsq = function(v)
+{
+	return vdot(v, v);
+};
+var vlengthsq2 = cp.v.lengthsq2 = function(x, y)
+{
+	return x*x + y*y;
+};
+var vlerp = cp.v.lerp = function(v1, v2, t)
+{
+	return vadd(vmult(v1, 1 - t), vmult(v2, t));
+};
+var vnormalize = cp.v.normalize = function(v)
+{
+	return vmult(v, 1/vlength(v));
+};
+var vnormalize_safe = cp.v.normalize_safe = function(v)
+{
+	return (v.x === 0 && v.y === 0 ? vzero : vnormalize(v));
+};
+var vclamp = cp.v.clamp = function(v, len)
+{
+	return (vdot(v,v) > len*len) ? vmult(vnormalize(v), len) : v;
+};
+var vlerpconst = cp.v.lerpconst = function(v1, v2, d)
+{
+	return vadd(v1, vclamp(vsub(v2, v1), d));
+};
+var vdist = cp.v.dist = function(v1, v2)
+{
+	return vlength(vsub(v1, v2));
+};
+var vdistsq = cp.v.distsq = function(v1, v2)
+{
+	return vlengthsq(vsub(v1, v2));
+};
+var vnear = cp.v.near = function(v1, v2, dist)
+{
+	return vdistsq(v1, v2) < dist*dist;
+};
+var vslerp = cp.v.slerp = function(v1, v2, t)
+{
+	var omega = Math.acos(vdot(v1, v2));
+	if(omega) {
+		var denom = 1/Math.sin(omega);
+		return vadd(vmult(v1, Math.sin((1 - t)*omega)*denom), vmult(v2, Math.sin(t*omega)*denom));
+	} else {
+		return v1;
+	}
+};
+var vslerpconst = cp.v.slerpconst = function(v1, v2, a)
+{
+	var angle = Math.acos(vdot(v1, v2));
+	return vslerp(v1, v2, min(a, angle)/angle);
+};
+var vforangle = cp.v.forangle = function(a)
+{
+	return new Vect(Math.cos(a), Math.sin(a));
+};
+var vtoangle = cp.v.toangle = function(v)
+{
+	return Math.atan2(v.y, v.x);
+};
+var vstr = cp.v.str = function(v)
+{
+	return "(" + v.x.toFixed(3) + ", " + v.y.toFixed(3) + ")";
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var numBB = 0;
+var BB = cp.BB = function(l, b, r, t)
+{
+	this.l = l;
+	this.b = b;
+	this.r = r;
+	this.t = t;
+	numBB++;
+};
+cp.bb = function(l, b, r, t) { return new BB(l, b, r, t); };
+var bbNewForCircle = function(p, r)
+{
+	return new BB(
+			p.x - r,
+			p.y - r,
+			p.x + r,
+			p.y + r
+		);
+};
+var bbIntersects = function(a, b)
+{
+	return (a.l <= b.r && b.l <= a.r && a.b <= b.t && b.b <= a.t);
+};
+var bbIntersects2 = function(bb, l, b, r, t)
+{
+	return (bb.l <= r && l <= bb.r && bb.b <= t && b <= bb.t);
+};
+var bbContainsBB = function(bb, other)
+{
+	return (bb.l <= other.l && bb.r >= other.r && bb.b <= other.b && bb.t >= other.t);
+};
+var bbContainsVect = function(bb, v)
+{
+	return (bb.l <= v.x && bb.r >= v.x && bb.b <= v.y && bb.t >= v.y);
+};
+var bbContainsVect2 = function(l, b, r, t, v)
+{
+	return (l <= v.x && r >= v.x && b <= v.y && t >= v.y);
+};
+var bbMerge = function(a, b){
+	return new BB(
+			min(a.l, b.l),
+			min(a.b, b.b),
+			max(a.r, b.r),
+			max(a.t, b.t)
+		);
+};
+var bbExpand = function(bb, v){
+	return new BB(
+			min(bb.l, v.x),
+			min(bb.b, v.y),
+			max(bb.r, v.x),
+			max(bb.t, v.y)
+		);
+};
+var bbArea = function(bb)
+{
+	return (bb.r - bb.l)*(bb.t - bb.b);
+};
+var bbMergedArea = function(a, b)
+{
+	return (max(a.r, b.r) - min(a.l, b.l))*(max(a.t, b.t) - min(a.b, b.b));
+};
+var bbMergedArea2 = function(bb, l, b, r, t)
+{
+	return (max(bb.r, r) - min(bb.l, l))*(max(bb.t, t) - min(bb.b, b));
+};
+var bbIntersectsSegment = function(bb, a, b)
+{
+	return (bbSegmentQuery(bb, a, b) != Infinity);
+};
+var bbClampVect = function(bb, v)
+{
+	var x = min(max(bb.l, v.x), bb.r);
+	var y = min(max(bb.b, v.y), bb.t);
+	return new Vect(x, y);
+};
+var bbWrapVect = function(bb, v)
+{
+	var ix = Math.abs(bb.r - bb.l);
+	var modx = (v.x - bb.l) % ix;
+	var x = (modx > 0) ? modx : modx + ix;
+	var iy = Math.abs(bb.t - bb.b);
+	var mody = (v.y - bb.b) % iy;
+	var y = (mody > 0) ? mody : mody + iy;
+	return new Vect(x + bb.l, y + bb.b);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+/* These are created using literals where needed.
+typedef struct cpSegmentQueryInfo {
+	cpShape *shape;
+	cpFloat t;
+	cpVect n;
+} cpSegmentQueryInfo;
+*/
+var shapeIDCounter = 0;
+var CP_NO_GROUP = cp.NO_GROUP = 0;
+var CP_ALL_LAYERS = cp.ALL_LAYERS = ~0;
+cp.resetShapeIdCounter = function()
+{
+	shapeIDCounter = 0;
+};
+var Shape = cp.Shape = function(body) {
+	this.body = body;
+	this.bb_l = this.bb_b = this.bb_r = this.bb_t = 0;
+	this.hashid = shapeIDCounter++;
+	this.sensor = false;
+	this.e = 0;
+	this.u = 0;
+	this.surface_v = vzero;
+	this.collision_type = 0;
+	this.group = 0;
+	this.layers = CP_ALL_LAYERS;
+	this.space = null;
+	this.isAdded = false;
+	this.collisionCode = this.collisionCode;
+};
+Shape.prototype.setElasticity = function(e) { this.e = e; };
+Shape.prototype.setFriction = function(u) { this.body.activate(); this.u = u; };
+Shape.prototype.setLayers = function(layers) { this.body.activate(); this.layers = layers; };
+Shape.prototype.setSensor = function(sensor) { this.body.activate(); this.sensor = sensor; };
+Shape.prototype.setCollisionType = function(collision_type) { this.body.activate(); this.collision_type = collision_type; };
+Shape.prototype.getBody = function() { return this.body; };
+Shape.prototype.active = function()
+{
+	return this.body && this.body.shapeList.indexOf(this) !== -1;
+};
+Shape.prototype.setBody = function(body)
+{
+	assert(!this.active(), "You cannot change the body on an active shape. You must remove the shape from the space before changing the body.");
+	this.body = body;
+};
+Shape.prototype.cacheBB = function()
+{
+	return this.update(this.body.p, this.body.rot);
+};
+Shape.prototype.update = function(pos, rot)
+{
+	assert(!isNaN(rot.x), 'Rotation is NaN');
+	assert(!isNaN(pos.x), 'Position is NaN');
+	this.cacheData(pos, rot);
+};
+Shape.prototype.pointQuery = function(p)
+{
+	var info = this.nearestPointQuery(p);
+	if (info.d < 0) return info;
+};
+Shape.prototype.getBB = function()
+{
+	return new BB(this.bb_l, this.bb_b, this.bb_r, this.bb_t);
+};
+/* Not implemented - all these getters and setters. Just edit the object directly.
+CP_DefineShapeStructGetter(cpBody*, body, Body);
+void cpShapeSetBody(cpShape *shape, cpBody *body);
+CP_DefineShapeStructGetter(cpBB, bb, BB);
+CP_DefineShapeStructProperty(cpBool, sensor, Sensor, cpTrue);
+CP_DefineShapeStructProperty(cpFloat, e, Elasticity, cpFalse);
+CP_DefineShapeStructProperty(cpFloat, u, Friction, cpTrue);
+CP_DefineShapeStructProperty(cpVect, surface_v, SurfaceVelocity, cpTrue);
+CP_DefineShapeStructProperty(cpDataPointer, data, UserData, cpFalse);
+CP_DefineShapeStructProperty(cpCollisionType, collision_type, CollisionType, cpTrue);
+CP_DefineShapeStructProperty(cpGroup, group, Group, cpTrue);
+CP_DefineShapeStructProperty(cpLayers, layers, Layers, cpTrue);
+*/
+var PointQueryExtendedInfo = function(shape)
+{
+	this.shape = shape;
+	this.d = Infinity;
+	this.n = vzero;
+};
+var NearestPointQueryInfo = cp.NearestPointQueryInfo = function(shape, p, d)
+{
+	this.shape = shape;
+	this.p = p;
+	this.d = d;
+};
+var SegmentQueryInfo = cp.SegmentQueryInfo = function(shape, t, n)
+{
+	this.shape = shape;
+	this.t = t;
+	this.n = n;
+};
+SegmentQueryInfo.prototype.hitPoint = function(start, end)
+{
+	return vlerp(start, end, this.t);
+};
+SegmentQueryInfo.prototype.hitDist = function(start, end)
+{
+	return vdist(start, end) * this.t;
+};
+var CircleShape = cp.CircleShape = function(body, radius, offset)
+{
+	this.c = this.tc = offset;
+	this.r = radius;
+	this.type = 'circle';
+	Shape.call(this, body);
+};
+CircleShape.prototype = Object.create(Shape.prototype);
+CircleShape.prototype.cacheData = function(p, rot)
+{
+	var c = this.tc = vrotate(this.c, rot).add(p);
+	var r = this.r;
+	this.bb_l = c.x - r;
+	this.bb_b = c.y - r;
+	this.bb_r = c.x + r;
+	this.bb_t = c.y + r;
+};
+/*CircleShape.prototype.pointQuery = function(p)
+{
+	var delta = vsub(p, this.tc);
+	var distsq = vlengthsq(delta);
+	var r = this.r;
+	if(distsq < r*r){
+		var info = new PointQueryExtendedInfo(this);
+		var dist = Math.sqrt(distsq);
+		info.d = r - dist;
+		info.n = vmult(delta, 1/dist);
+		return info;
+	}
+};*/
+CircleShape.prototype.nearestPointQuery = function(p)
+{
+	var deltax = p.x - this.tc.x;
+	var deltay = p.y - this.tc.y;
+	var d = vlength2(deltax, deltay);
+	var r = this.r;
+	var nearestp = new Vect(this.tc.x + deltax * r/d, this.tc.y + deltay * r/d);
+	return new NearestPointQueryInfo(this, nearestp, d - r);
+};
+var circleSegmentQuery = function(shape, center, r, a, b, info)
+{
+	a = vsub(a, center);
+	b = vsub(b, center);
+	var qa = vdot(a, a) - 2*vdot(a, b) + vdot(b, b);
+	var qb = -2*vdot(a, a) + 2*vdot(a, b);
+	var qc = vdot(a, a) - r*r;
+	var det = qb*qb - 4*qa*qc;
+	if(det >= 0)
+	{
+		var t = (-qb - Math.sqrt(det))/(2*qa);
+		if(0 <= t && t <= 1){
+			return new SegmentQueryInfo(shape, t, vnormalize(vlerp(a, b, t)));
+		}
+	}
+};
+CircleShape.prototype.segmentQuery = function(a, b)
+{
+	return circleSegmentQuery(this, this.tc, this.r, a, b);
+};
+/*
+CircleShape.prototype.setRadius = function(radius)
+{
+	this.r = radius;
+}
+CircleShape.prototype.setOffset = function(offset)
+{
+	this.c = offset;
+}*/
+var SegmentShape = cp.SegmentShape = function(body, a, b, r)
+{
+	this.a = a;
+	this.b = b;
+	this.n = vperp(vnormalize(vsub(b, a)));
+	this.ta = this.tb = this.tn = null;
+	this.r = r;
+	this.a_tangent = vzero;
+	this.b_tangent = vzero;
+	this.type = 'segment';
+	Shape.call(this, body);
+};
+SegmentShape.prototype = Object.create(Shape.prototype);
+SegmentShape.prototype.cacheData = function(p, rot)
+{
+	this.ta = vadd(p, vrotate(this.a, rot));
+	this.tb = vadd(p, vrotate(this.b, rot));
+	this.tn = vrotate(this.n, rot);
+	var l,r,b,t;
+	if(this.ta.x < this.tb.x){
+		l = this.ta.x;
+		r = this.tb.x;
+	} else {
+		l = this.tb.x;
+		r = this.ta.x;
+	}
+	if(this.ta.y < this.tb.y){
+		b = this.ta.y;
+		t = this.tb.y;
+	} else {
+		b = this.tb.y;
+		t = this.ta.y;
+	}
+	var rad = this.r;
+	this.bb_l = l - rad;
+	this.bb_b = b - rad;
+	this.bb_r = r + rad;
+	this.bb_t = t + rad;
+};
+SegmentShape.prototype.nearestPointQuery = function(p)
+{
+	var closest = closestPointOnSegment(p, this.ta, this.tb);
+	var deltax = p.x - closest.x;
+	var deltay = p.y - closest.y;
+	var d = vlength2(deltax, deltay);
+	var r = this.r;
+	var nearestp = (d ? vadd(closest, vmult(new Vect(deltax, deltay), r/d)) : closest);
+	return new NearestPointQueryInfo(this, nearestp, d - r);
+};
+SegmentShape.prototype.segmentQuery = function(a, b)
+{
+	var n = this.tn;
+	var d = vdot(vsub(this.ta, a), n);
+	var r = this.r;
+	var flipped_n = (d > 0 ? vneg(n) : n);
+	var n_offset = vsub(vmult(flipped_n, r), a);
+	var seg_a = vadd(this.ta, n_offset);
+	var seg_b = vadd(this.tb, n_offset);
+	var delta = vsub(b, a);
+	if(vcross(delta, seg_a)*vcross(delta, seg_b) <= 0){
+		var d_offset = d + (d > 0 ? -r : r);
+		var ad = -d_offset;
+		var bd = vdot(delta, n) - d_offset;
+		if(ad*bd < 0){
+			return new SegmentQueryInfo(this, ad/(ad - bd), flipped_n);
+		}
+	} else if(r !== 0){
+		var info1 = circleSegmentQuery(this, this.ta, this.r, a, b);
+		var info2 = circleSegmentQuery(this, this.tb, this.r, a, b);
+		if (info1){
+			return info2 && info2.t < info1.t ? info2 : info1;
+		} else {
+			return info2;
+		}
+	}
+};
+SegmentShape.prototype.setNeighbors = function(prev, next)
+{
+	this.a_tangent = vsub(prev, this.a);
+	this.b_tangent = vsub(next, this.b);
+};
+SegmentShape.prototype.setEndpoints = function(a, b)
+{
+	this.a = a;
+	this.b = b;
+	this.n = vperp(vnormalize(vsub(b, a)));
+};
+/*
+cpSegmentShapeSetRadius(cpShape *shape, cpFloat radius)
+{
+	this.r = radius;
+}*/
+/*
+CP_DeclareShapeGetter(cpSegmentShape, cpVect, A);
+CP_DeclareShapeGetter(cpSegmentShape, cpVect, B);
+CP_DeclareShapeGetter(cpSegmentShape, cpVect, Normal);
+CP_DeclareShapeGetter(cpSegmentShape, cpFloat, Radius);
+*/
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var polyValidate = cr.polyValidate = function(verts)
+{
+	var len = verts.length;
+	for(var i=0; i<len; i+=2){
+		var ax = verts[i];
+	 	var ay = verts[i+1];
+		var bx = verts[(i+2)%len];
+		var by = verts[(i+3)%len];
+		var cx = verts[(i+4)%len];
+		var cy = verts[(i+5)%len];
+		if(vcross2(bx - ax, by - ay, cx - bx, cy - by) > 0){
+			return false;
+		}
+	}
+	return true;
+};
+var PolyShape = cp.PolyShape = function(body, verts, offset)
+{
+	this.setVerts(verts, offset);
+	this.type = 'poly';
+	Shape.call(this, body);
+};
+PolyShape.prototype = Object.create(Shape.prototype);
+var SplittingPlane = function(n, d)
+{
+	this.n = n;
+	this.d = d;
+};
+SplittingPlane.prototype.compare = function(v)
+{
+	return vdot(this.n, v) - this.d;
+};
+PolyShape.prototype.setVerts = function(verts, offset)
+{
+	assert(verts.length >= 4, "Polygons require some verts");
+	assert(typeof(verts[0]) === 'number',
+			'Polygon verticies should be specified in a flattened list (eg [x1,y1,x2,y2,x3,y3,...])');
+	assert(polyValidate(verts), "Polygon is concave or has a reversed winding. Consider using cpConvexHull()");
+	var len = verts.length;
+	var numVerts = len >> 1;
+	this.verts = new Array(len);
+	this.tVerts = new Array(len);
+	this.planes = new Array(numVerts);
+	this.tPlanes = new Array(numVerts);
+	for(var i=0; i<len; i+=2){
+		var ax = verts[i] + offset.x;
+	 	var ay = verts[i+1] + offset.y;
+		var bx = verts[(i+2)%len] + offset.x;
+		var by = verts[(i+3)%len] + offset.y;
+		var n = vnormalize(vperp(new Vect(bx-ax, by-ay)));
+		this.verts[i  ] = ax;
+		this.verts[i+1] = ay;
+		this.planes[i>>1] = new SplittingPlane(n, vdot2(n.x, n.y, ax, ay));
+		this.tPlanes[i>>1] = new SplittingPlane(new Vect(0,0), 0);
+	}
+};
+var BoxShape = cp.BoxShape = function(body, width, height)
+{
+	var hw = width/2;
+	var hh = height/2;
+	return BoxShape2(body, new BB(-hw, -hh, hw, hh));
+};
+var BoxShape2 = cp.BoxShape2 = function(body, box)
+{
+	var verts = [
+		box.l, box.b,
+		box.l, box.t,
+		box.r, box.t,
+		box.r, box.b,
+	];
+	return new PolyShape(body, verts, vzero);
+};
+PolyShape.prototype.transformVerts = function(p, rot)
+{
+	var src = this.verts;
+	var dst = this.tVerts;
+	var l = Infinity, r = -Infinity;
+	var b = Infinity, t = -Infinity;
+	for(var i=0; i<src.length; i+=2){
+		var x = src[i];
+	 	var y = src[i+1];
+		var vx = p.x + x*rot.x - y*rot.y;
+		var vy = p.y + x*rot.y + y*rot.x;
+		dst[i] = vx;
+		dst[i+1] = vy;
+		l = min(l, vx);
+		r = max(r, vx);
+		b = min(b, vy);
+		t = max(t, vy);
+	}
+	this.bb_l = l;
+	this.bb_b = b;
+	this.bb_r = r;
+	this.bb_t = t;
+};
+PolyShape.prototype.transformAxes = function(p, rot)
+{
+	var src = this.planes;
+	var dst = this.tPlanes;
+	for(var i=0; i<src.length; i++){
+		var n = vrotate(src[i].n, rot);
+		dst[i].n = n;
+		dst[i].d = vdot(p, n) + src[i].d;
+	}
+};
+PolyShape.prototype.cacheData = function(p, rot)
+{
+	this.transformAxes(p, rot);
+	this.transformVerts(p, rot);
+};
+PolyShape.prototype.nearestPointQuery = function(p)
+{
+	var planes = this.tPlanes;
+	var verts = this.tVerts;
+	var v0x = verts[verts.length - 2];
+	var v0y = verts[verts.length - 1];
+	var minDist = Infinity;
+	var closestPoint = vzero;
+	var outside = false;
+	for(var i=0; i<planes.length; i++){
+		if(planes[i].compare(p) > 0) outside = true;
+		var v1x = verts[i*2];
+		var v1y = verts[i*2 + 1];
+		var closest = closestPointOnSegment2(p.x, p.y, v0x, v0y, v1x, v1y);
+		var dist = vdist(p, closest);
+		if(dist < minDist){
+			minDist = dist;
+			closestPoint = closest;
+		}
+		v0x = v1x;
+		v0y = v1y;
+	}
+	return new NearestPointQueryInfo(this, closestPoint, (outside ? minDist : -minDist));
+};
+PolyShape.prototype.segmentQuery = function(a, b)
+{
+	var axes = this.tPlanes;
+	var verts = this.tVerts;
+	var numVerts = axes.length;
+	var len = numVerts * 2;
+	for(var i=0; i<numVerts; i++){
+		var n = axes[i].n;
+		var an = vdot(a, n);
+		if(axes[i].d > an) continue;
+		var bn = vdot(b, n);
+		var t = (axes[i].d - an)/(bn - an);
+		if(t < 0 || 1 < t) continue;
+		var point = vlerp(a, b, t);
+		var dt = -vcross(n, point);
+		var dtMin = -vcross2(n.x, n.y, verts[i*2], verts[i*2+1]);
+		var dtMax = -vcross2(n.x, n.y, verts[(i*2+2)%len], verts[(i*2+3)%len]);
+		if(dtMin <= dt && dt <= dtMax){
+			return new SegmentQueryInfo(this, t, n);
+		}
+	}
+};
+PolyShape.prototype.valueOnAxis = function(n, d)
+{
+	var verts = this.tVerts;
+	var m = vdot2(n.x, n.y, verts[0], verts[1]);
+	for(var i=2; i<verts.length; i+=2){
+		m = min(m, vdot2(n.x, n.y, verts[i], verts[i+1]));
+	}
+	return m - d;
+};
+PolyShape.prototype.containsVert = function(vx, vy)
+{
+	var planes = this.tPlanes;
+	for(var i=0; i<planes.length; i++){
+		var n = planes[i].n;
+		var dist = vdot2(n.x, n.y, vx, vy) - planes[i].d;
+		if(dist > 0) return false;
+	}
+	return true;
+};
+PolyShape.prototype.containsVertPartial = function(vx, vy, n)
+{
+	var planes = this.tPlanes;
+	for(var i=0; i<planes.length; i++){
+		var n2 = planes[i].n;
+		if(vdot(n2, n) < 0) continue;
+		var dist = vdot2(n2.x, n2.y, vx, vy) - planes[i].d;
+		if(dist > 0) return false;
+	}
+	return true;
+};
+PolyShape.prototype.getNumVerts = function() { return this.verts.length / 2; };
+PolyShape.prototype.getVert = function(i)
+{
+	return new Vect(this.verts[i * 2], this.verts[i * 2 + 1]);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var Body = cp.Body = function(m, i) {
+	this.p = new Vect(0,0);
+	this.vx = this.vy = 0;
+	this.f = new Vect(0,0);
+	this.w = 0;
+	this.t = 0;
+	this.v_limit = Infinity;
+	this.w_limit = Infinity;
+	this.v_biasx = this.v_biasy = 0;
+	this.w_bias = 0;
+	this.space = null;
+	this.isAdded = false;
+	this.shapeList = [];
+	this.arbiterList = null; // These are both wacky linked lists.
+	this.constraintList = null;
+	this.nodeRoot = null;
+	this.nodeNext = null;
+	this.nodeIdleTime = 0;
+	this.setMass(m);
+	this.setMoment(i);
+	this.rot = new Vect(0,0);
+	this.setAngle(0);
+};
+var createStaticBody = function()
+{
+	var body = new Body(Infinity, Infinity);
+	body.nodeIdleTime = Infinity;
+	return body;
+};
+if (typeof DEBUG !== 'undefined' && DEBUG) {
+	var v_assert_nan = function(v, message){assert(v.x == v.x && v.y == v.y, message); };
+	var v_assert_infinite = function(v, message){assert(Math.abs(v.x) !== Infinity && Math.abs(v.y) !== Infinity, message);};
+	var v_assert_sane = function(v, message){v_assert_nan(v, message); v_assert_infinite(v, message);};
+	Body.prototype.sanityCheck = function()
+	{
+		assert(this.m === this.m && this.m_inv === this.m_inv, "Body's mass is invalid.");
+		assert(this.i === this.i && this.i_inv === this.i_inv, "Body's moment is invalid.");
+		v_assert_sane(this.p, "Body's position is invalid.");
+		v_assert_sane(this.f, "Body's force is invalid.");
+		assert(this.vx === this.vx && Math.abs(this.vx) !== Infinity, "Body's velocity is invalid.");
+		assert(this.vy === this.vy && Math.abs(this.vy) !== Infinity, "Body's velocity is invalid.");
+		assert(this.a === this.a && Math.abs(this.a) !== Infinity, "Body's angle is invalid.");
+		assert(this.w === this.w && Math.abs(this.w) !== Infinity, "Body's angular velocity is invalid.");
+		assert(this.t === this.t && Math.abs(this.t) !== Infinity, "Body's torque is invalid.");
+		v_assert_sane(this.rot, "Body's rotation vector is invalid.");
+		assert(this.v_limit === this.v_limit, "Body's velocity limit is invalid.");
+		assert(this.w_limit === this.w_limit, "Body's angular velocity limit is invalid.");
+	};
+} else {
+	Body.prototype.sanityCheck = function(){};
+}
+Body.prototype.getPos = function() { return this.p; };
+Body.prototype.getAngle=function(){return cp.v.toangle(this.rot)},
+Body.prototype.getVel = function() { return new Vect(this.vx, this.vy); };
+Body.prototype.getAngVel = function() { return this.w; };
+Body.prototype.isSleeping = function()
+{
+	return this.nodeRoot !== null;
+};
+Body.prototype.isStatic = function()
+{
+	return this.nodeIdleTime === Infinity;
+};
+Body.prototype.isRogue = function()
+{
+	return this.space === null;
+};
+Body.prototype.setMass = function(mass)
+{
+	assert(mass > 0, "Mass must be positive and non-zero.");
+	this.activate();
+	this.m = mass;
+	this.m_inv = 1/mass;
+};
+Body.prototype.setMoment = function(moment)
+{
+	assert(moment > 0, "Moment of Inertia must be positive and non-zero.");
+	this.activate();
+	this.i = moment;
+	this.i_inv = 1/moment;
+};
+Body.prototype.addShape = function(shape)
+{
+	this.shapeList.push(shape);
+};
+Body.prototype.removeShape = function(shape)
+{
+	deleteObjFromList(this.shapeList, shape);
+};
+var filterConstraints = function(node, body, filter)
+{
+	if(node === filter){
+		return node.next(body);
+	} else if(node.a === body){
+		node.next_a = filterConstraints(node.next_a, body, filter);
+	} else {
+		node.next_b = filterConstraints(node.next_b, body, filter);
+	}
+	return node;
+};
+Body.prototype.removeConstraint = function(constraint)
+{
+	this.constraintList = filterConstraints(this.constraintList, this, constraint);
+};
+Body.prototype.setPos = function(pos)
+{
+	this.activate();
+	this.sanityCheck();
+	if (pos === vzero) {
+		pos = cp.v(0,0);
+	}
+	this.p = pos;
+};
+Body.prototype.setVel = function(velocity)
+{
+	this.activate();
+	this.vx = velocity.x;
+	this.vy = velocity.y;
+};
+Body.prototype.setAngVel = function(w)
+{
+	this.activate();
+	this.w = w;
+};
+Body.prototype.setAngleInternal = function(angle)
+{
+	assert(!isNaN(angle), "Internal Error: Attempting to set body's angle to NaN");
+	this.a = angle;//fmod(a, (cpFloat)M_PI*2.0f);
+	this.rot.x = Math.cos(angle);
+	this.rot.y = Math.sin(angle);
+};
+Body.prototype.setAngle = function(angle)
+{
+	this.activate();
+	this.sanityCheck();
+	this.setAngleInternal(angle);
+};
+Body.prototype.velocity_func = function(gravity, damping, dt)
+{
+	var vx = this.vx * damping + (gravity.x + this.f.x * this.m_inv) * dt;
+	var vy = this.vy * damping + (gravity.y + this.f.y * this.m_inv) * dt;
+	var v_limit = this.v_limit;
+	var lensq = vx * vx + vy * vy;
+	var scale = (lensq > v_limit*v_limit) ? v_limit / Math.sqrt(lensq) : 1;
+	this.vx = vx * scale;
+	this.vy = vy * scale;
+	var w_limit = this.w_limit;
+	this.w = clamp(this.w*damping + this.t*this.i_inv*dt, -w_limit, w_limit);
+	this.sanityCheck();
+};
+Body.prototype.position_func = function(dt)
+{
+	this.p.x += (this.vx + this.v_biasx) * dt;
+	this.p.y += (this.vy + this.v_biasy) * dt;
+	this.setAngleInternal(this.a + (this.w + this.w_bias)*dt);
+	this.v_biasx = this.v_biasy = 0;
+	this.w_bias = 0;
+	this.sanityCheck();
+};
+Body.prototype.resetForces = function()
+{
+	this.activate();
+	this.f = new Vect(0,0);
+	this.t = 0;
+};
+Body.prototype.applyForce = function(force, r)
+{
+	this.activate();
+	this.f = vadd(this.f, force);
+	this.t += vcross(r, force);
+};
+Body.prototype.applyImpulse = function(j, r)
+{
+	this.activate();
+	apply_impulse(this, j.x, j.y, r);
+};
+Body.prototype.getVelAtPoint = function(r)
+{
+	return vadd(new Vect(this.vx, this.vy), vmult(vperp(r), this.w));
+};
+Body.prototype.getVelAtWorldPoint = function(point)
+{
+	return this.getVelAtPoint(vsub(point, this.p));
+};
+Body.prototype.getVelAtLocalPoint = function(point)
+{
+	return this.getVelAtPoint(vrotate(point, this.rot));
+};
+Body.prototype.eachShape = function(func)
+{
+	for(var i = 0, len = this.shapeList.length; i < len; i++) {
+		func(this.shapeList[i]);
+	}
+};
+Body.prototype.eachConstraint = function(func)
+{
+	var constraint = this.constraintList;
+	while(constraint) {
+		var next = constraint.next(this);
+		func(constraint);
+		constraint = next;
+	}
+};
+Body.prototype.eachArbiter = function(func)
+{
+	var arb = this.arbiterList;
+	while(arb){
+		var next = arb.next(this);
+		arb.swappedColl = (this === arb.body_b);
+		func.call(this, arb);
+		arb = next;
+	}
+};
+Body.prototype.local2World = function(v)
+{
+	return vadd(this.p, vrotate(v, this.rot));
+};
+Body.prototype.world2Local = function(v)
+{
+	return vunrotate(vsub(v, this.p), this.rot);
+};
+Body.prototype.kineticEnergy = function()
+{
+	var vsq = this.vx*this.vx + this.vy*this.vy;
+	var wsq = this.w * this.w;
+	return (vsq ? vsq*this.m : 0) + (wsq ? wsq*this.i : 0);
+};
+/* Copyright (c) 2010 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+/**
+	@defgroup cpSpatialIndex cpSpatialIndex
+	Spatial indexes are data structures that are used to accelerate collision detection
+	and spatial queries. Chipmunk provides a number of spatial index algorithms to pick from
+	and they are programmed in a generic way so that you can use them for holding more than
+	just Shapes.
+	It works by using pointers to the objects you add and using a callback to ask your code
+	for bounding boxes when it needs them. Several types of queries can be performed an index as well
+	as reindexing and full collision information. All communication to the spatial indexes is performed
+	through callback functions.
+	Spatial indexes should be treated as opaque structs.
+	This means you shouldn't be reading any of the fields directly.
+	All spatial indexes define the following methods:
+	count = 0;
+	each(func);
+	contains(obj, hashid);
+	insert(obj, hashid);
+	remove(obj, hashid);
+	reindex();
+	reindexObject(obj, hashid);
+	pointQuery(point, func);
+	segmentQuery(vect a, vect b, t_exit, func);
+	query(bb, func);
+	reindexQuery(func);
+*/
+var SpatialIndex = cp.SpatialIndex = function(staticIndex)
+{
+	this.staticIndex = staticIndex;
+	if(staticIndex){
+		if(staticIndex.dynamicIndex){
+			throw new Error("This static index is already associated with a dynamic index.");
+		}
+		staticIndex.dynamicIndex = this;
+	}
+};
+SpatialIndex.prototype.collideStatic = function(staticIndex, func)
+{
+	if(staticIndex.count > 0){
+		var query = staticIndex.query;
+		this.each(function(obj) {
+			query(obj, new BB(obj.bb_l, obj.bb_b, obj.bb_r, obj.bb_t), func);
+		});
+	}
+};
+/* Copyright (c) 2009 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var BBTree = cp.BBTree = function(staticIndex)
+{
+	SpatialIndex.call(this, staticIndex);
+	this.velocityFunc = null;
+	this.leaves = {};
+	this.count = 0;
+	this.root = null;
+	this.pooledNodes = null;
+	this.pooledPairs = null;
+	this.stamp = 0;
+};
+BBTree.prototype = Object.create(SpatialIndex.prototype);
+var numNodes = 0;
+var Node = function(tree, a, b)
+{
+	this.obj = null;
+	this.bb_l = min(a.bb_l, b.bb_l);
+	this.bb_b = min(a.bb_b, b.bb_b);
+	this.bb_r = max(a.bb_r, b.bb_r);
+	this.bb_t = max(a.bb_t, b.bb_t);
+	this.parent = null;
+	this.setA(a);
+	this.setB(b);
+};
+BBTree.prototype.makeNode = function(a, b)
+{
+	var node = this.pooledNodes;
+	if(node){
+		this.pooledNodes = node.parent;
+		node.constructor(this, a, b);
+		return node;
+	} else {
+		numNodes++;
+		return new Node(this, a, b);
+	}
+};
+var numLeaves = 0;
+var Leaf = function(tree, obj)
+{
+	this.obj = obj;
+	tree.getBB(obj, this);
+	this.parent = null;
+	this.stamp = 1;
+	this.pairs = null;
+	numLeaves++;
+};
+BBTree.prototype.getBB = function(obj, dest)
+{
+	var velocityFunc = this.velocityFunc;
+	if(velocityFunc){
+		var coef = 0.1;
+		var x = (obj.bb_r - obj.bb_l)*coef;
+		var y = (obj.bb_t - obj.bb_b)*coef;
+		var v = vmult(velocityFunc(obj), 0.1);
+		dest.bb_l = obj.bb_l + min(-x, v.x);
+		dest.bb_b = obj.bb_b + min(-y, v.y);
+		dest.bb_r = obj.bb_r + max( x, v.x);
+		dest.bb_t = obj.bb_t + max( y, v.y);
+	} else {
+		dest.bb_l = obj.bb_l;
+		dest.bb_b = obj.bb_b;
+		dest.bb_r = obj.bb_r;
+		dest.bb_t = obj.bb_t;
+	}
+};
+BBTree.prototype.getStamp = function()
+{
+	var dynamic = this.dynamicIndex;
+	return (dynamic && dynamic.stamp ? dynamic.stamp : this.stamp);
+};
+BBTree.prototype.incrementStamp = function()
+{
+	if(this.dynamicIndex && this.dynamicIndex.stamp){
+		this.dynamicIndex.stamp++;
+	} else {
+		this.stamp++;
+	}
+}
+var numPairs = 0;
+var Pair = function(leafA, nextA, leafB, nextB)
+{
+	this.prevA = null;
+	this.leafA = leafA;
+	this.nextA = nextA;
+	this.prevB = null;
+	this.leafB = leafB;
+	this.nextB = nextB;
+};
+BBTree.prototype.makePair = function(leafA, nextA, leafB, nextB)
+{
+	var pair = this.pooledPairs;
+	if (pair)
+	{
+		this.pooledPairs = pair.prevA;
+		pair.prevA = null;
+		pair.leafA = leafA;
+		pair.nextA = nextA;
+		pair.prevB = null;
+		pair.leafB = leafB;
+		pair.nextB = nextB;
+		return pair;
+	} else {
+		numPairs++;
+		return new Pair(leafA, nextA, leafB, nextB);
+	}
+};
+Pair.prototype.recycle = function(tree)
+{
+	this.prevA = tree.pooledPairs;
+	tree.pooledPairs = this;
+};
+var unlinkThread = function(prev, leaf, next)
+{
+	if(next){
+		if(next.leafA === leaf) next.prevA = prev; else next.prevB = prev;
+	}
+	if(prev){
+		if(prev.leafA === leaf) prev.nextA = next; else prev.nextB = next;
+	} else {
+		leaf.pairs = next;
+	}
+};
+Leaf.prototype.clearPairs = function(tree)
+{
+	var pair = this.pairs,
+		next;
+	this.pairs = null;
+	while(pair){
+		if(pair.leafA === this){
+			next = pair.nextA;
+			unlinkThread(pair.prevB, pair.leafB, pair.nextB);
+		} else {
+			next = pair.nextB;
+			unlinkThread(pair.prevA, pair.leafA, pair.nextA);
+		}
+		pair.recycle(tree);
+		pair = next;
+	}
+};
+var pairInsert = function(a, b, tree)
+{
+	var nextA = a.pairs, nextB = b.pairs;
+	var pair = tree.makePair(a, nextA, b, nextB);
+	a.pairs = b.pairs = pair;
+	if(nextA){
+		if(nextA.leafA === a) nextA.prevA = pair; else nextA.prevB = pair;
+	}
+	if(nextB){
+		if(nextB.leafA === b) nextB.prevA = pair; else nextB.prevB = pair;
+	}
+};
+Node.prototype.recycle = function(tree)
+{
+	this.parent = tree.pooledNodes;
+	tree.pooledNodes = this;
+};
+Leaf.prototype.recycle = function(tree)
+{
+};
+Node.prototype.setA = function(value)
+{
+	this.A = value;
+	value.parent = this;
+};
+Node.prototype.setB = function(value)
+{
+	this.B = value;
+	value.parent = this;
+};
+Leaf.prototype.isLeaf = true;
+Node.prototype.isLeaf = false;
+Node.prototype.otherChild = function(child)
+{
+	return (this.A == child ? this.B : this.A);
+};
+Node.prototype.replaceChild = function(child, value, tree)
+{
+	assertSoft(child == this.A || child == this.B, "Node is not a child of parent.");
+	if(this.A == child){
+		this.A.recycle(tree);
+		this.setA(value);
+	} else {
+		this.B.recycle(tree);
+		this.setB(value);
+	}
+	for(var node=this; node; node = node.parent){
+		var a = node.A;
+		var b = node.B;
+		node.bb_l = min(a.bb_l, b.bb_l);
+		node.bb_b = min(a.bb_b, b.bb_b);
+		node.bb_r = max(a.bb_r, b.bb_r);
+		node.bb_t = max(a.bb_t, b.bb_t);
+	}
+};
+Node.prototype.bbArea = Leaf.prototype.bbArea = function()
+{
+	return (this.bb_r - this.bb_l)*(this.bb_t - this.bb_b);
+};
+var bbTreeMergedArea = function(a, b)
+{
+	return (max(a.bb_r, b.bb_r) - min(a.bb_l, b.bb_l))*(max(a.bb_t, b.bb_t) - min(a.bb_b, b.bb_b));
+};
+var bbProximity = function(a, b)
+{
+	return Math.abs(a.bb_l + a.bb_r - b.bb_l - b.bb_r) + Math.abs(a.bb_b + a.bb_t - b.bb_b - b.bb_t);
+};
+var subtreeInsert = function(subtree, leaf, tree)
+{
+	if(subtree == null){
+		return leaf;
+	} else if(subtree.isLeaf){
+		return tree.makeNode(leaf, subtree);
+	} else {
+		var cost_a = subtree.B.bbArea() + bbTreeMergedArea(subtree.A, leaf);
+		var cost_b = subtree.A.bbArea() + bbTreeMergedArea(subtree.B, leaf);
+		if(cost_a === cost_b){
+			cost_a = bbProximity(subtree.A, leaf);
+			cost_b = bbProximity(subtree.B, leaf);
+		}
+		if(cost_b < cost_a){
+			subtree.setB(subtreeInsert(subtree.B, leaf, tree));
+		} else {
+			subtree.setA(subtreeInsert(subtree.A, leaf, tree));
+		}
+		subtree.bb_l = min(subtree.bb_l, leaf.bb_l);
+		subtree.bb_b = min(subtree.bb_b, leaf.bb_b);
+		subtree.bb_r = max(subtree.bb_r, leaf.bb_r);
+		subtree.bb_t = max(subtree.bb_t, leaf.bb_t);
+		return subtree;
+	}
+};
+Node.prototype.intersectsBB = Leaf.prototype.intersectsBB = function(bb)
+{
+	return (this.bb_l <= bb.r && bb.l <= this.bb_r && this.bb_b <= bb.t && bb.b <= this.bb_t);
+};
+var subtreeQuery = function(subtree, bb, func)
+{
+	if(subtree.intersectsBB(bb)){
+		if(subtree.isLeaf){
+			func(subtree.obj);
+		} else {
+			subtreeQuery(subtree.A, bb, func);
+			subtreeQuery(subtree.B, bb, func);
+		}
+	}
+};
+var nodeSegmentQuery = function(node, a, b)
+{
+	var idx = 1/(b.x - a.x);
+	var tx1 = (/*node.bb_l == a.x ? -Infinity :*/ (node.bb_l - a.x)*idx);
+	var tx2 = (/*node.bb_r == a.x ?  Infinity :*/ (node.bb_r - a.x)*idx);
+	var txmin = min(tx1, tx2);
+	var txmax = max(tx1, tx2);
+	var idy = 1/(b.y - a.y);
+	var ty1 = (/*node.bb_b == a.y ? -Infinity :*/ (node.bb_b - a.y)*idy);
+	var ty2 = (/*node.bb_t == a.y ?  Infinity :*/ (node.bb_t - a.y)*idy);
+	var tymin = min(ty1, ty2);
+	var tymax = max(ty1, ty2);
+	if(tymin <= txmax && txmin <= tymax){
+		var min_ = max(txmin, tymin);
+		var max_ = min(txmax, tymax);
+		if(0.0 <= max_ && min_ <= 1.0) return max(min_, 0.0);
+	}
+	return Infinity;
+};
+var subtreeSegmentQuery = function(subtree, a, b, t_exit, func)
+{
+	if(subtree.isLeaf){
+		return func(subtree.obj);
+	} else {
+		var t_a = nodeSegmentQuery(subtree.A, a, b);
+		var t_b = nodeSegmentQuery(subtree.B, a, b);
+		if(t_a < t_b){
+			if(t_a < t_exit) t_exit = min(t_exit, subtreeSegmentQuery(subtree.A, a, b, t_exit, func));
+			if(t_b < t_exit) t_exit = min(t_exit, subtreeSegmentQuery(subtree.B, a, b, t_exit, func));
+		} else {
+			if(t_b < t_exit) t_exit = min(t_exit, subtreeSegmentQuery(subtree.B, a, b, t_exit, func));
+			if(t_a < t_exit) t_exit = min(t_exit, subtreeSegmentQuery(subtree.A, a, b, t_exit, func));
+		}
+		return t_exit;
+	}
+};
+BBTree.prototype.subtreeRecycle = function(node)
+{
+	if(node.isLeaf){
+		this.subtreeRecycle(node.A);
+		this.subtreeRecycle(node.B);
+		node.recycle(this);
+	}
+};
+var subtreeRemove = function(subtree, leaf, tree)
+{
+	if(leaf == subtree){
+		return null;
+	} else {
+		var parent = leaf.parent;
+		if(parent == subtree){
+			var other = subtree.otherChild(leaf);
+			other.parent = subtree.parent;
+			subtree.recycle(tree);
+			return other;
+		} else {
+			parent.parent.replaceChild(parent, parent.otherChild(leaf), tree);
+			return subtree;
+		}
+	}
+};
+/*
+typedef struct MarkContext {
+	bbTree *tree;
+	Node *staticRoot;
+	cpSpatialIndexQueryFunc func;
+} MarkContext;
+*/
+var bbTreeIntersectsNode = function(a, b)
+{
+	return (a.bb_l <= b.bb_r && b.bb_l <= a.bb_r && a.bb_b <= b.bb_t && b.bb_b <= a.bb_t);
+};
+Leaf.prototype.markLeafQuery = function(leaf, left, tree, func)
+{
+	if(bbTreeIntersectsNode(leaf, this)){
+    if(left){
+      pairInsert(leaf, this, tree);
+    } else {
+      if(this.stamp < leaf.stamp) pairInsert(this, leaf, tree);
+      if(func) func(leaf.obj, this.obj);
+    }
+  }
+};
+Node.prototype.markLeafQuery = function(leaf, left, tree, func)
+{
+	if(bbTreeIntersectsNode(leaf, this)){
+    this.A.markLeafQuery(leaf, left, tree, func);
+    this.B.markLeafQuery(leaf, left, tree, func);
+	}
+};
+Leaf.prototype.markSubtree = function(tree, staticRoot, func)
+{
+	if(this.stamp == tree.getStamp()){
+		if(staticRoot) staticRoot.markLeafQuery(this, false, tree, func);
+		for(var node = this; node.parent; node = node.parent){
+			if(node == node.parent.A){
+				node.parent.B.markLeafQuery(this, true, tree, func);
+			} else {
+				node.parent.A.markLeafQuery(this, false, tree, func);
+			}
+		}
+	} else {
+		var pair = this.pairs;
+		while(pair){
+			if(this === pair.leafB){
+				if(func) func(pair.leafA.obj, this.obj);
+				pair = pair.nextB;
+			} else {
+				pair = pair.nextA;
+			}
+		}
+	}
+};
+Node.prototype.markSubtree = function(tree, staticRoot, func)
+{
+  this.A.markSubtree(tree, staticRoot, func);
+  this.B.markSubtree(tree, staticRoot, func);
+};
+Leaf.prototype.containsObj = function(obj)
+{
+	return (this.bb_l <= obj.bb_l && this.bb_r >= obj.bb_r && this.bb_b <= obj.bb_b && this.bb_t >= obj.bb_t);
+};
+Leaf.prototype.update = function(tree)
+{
+	var root = tree.root;
+	var obj = this.obj;
+	if(!this.containsObj(obj)){
+		tree.getBB(this.obj, this);
+		root = subtreeRemove(root, this, tree);
+		tree.root = subtreeInsert(root, this, tree);
+		this.clearPairs(tree);
+		this.stamp = tree.getStamp();
+		return true;
+	}
+	return false;
+};
+Leaf.prototype.addPairs = function(tree)
+{
+	var dynamicIndex = tree.dynamicIndex;
+	if(dynamicIndex){
+		var dynamicRoot = dynamicIndex.root;
+		if(dynamicRoot){
+			dynamicRoot.markLeafQuery(this, true, dynamicIndex, null);
+		}
+	} else {
+		var staticRoot = tree.staticIndex.root;
+		this.markSubtree(tree, staticRoot, null);
+	}
+};
+BBTree.prototype.insert = function(obj, hashid)
+{
+	var leaf = new Leaf(this, obj);
+	this.leaves[hashid] = leaf;
+	this.root = subtreeInsert(this.root, leaf, this);
+	this.count++;
+	leaf.stamp = this.getStamp();
+	leaf.addPairs(this);
+	this.incrementStamp();
+};
+BBTree.prototype.remove = function(obj, hashid)
+{
+	var leaf = this.leaves[hashid];
+	delete this.leaves[hashid];
+	this.root = subtreeRemove(this.root, leaf, this);
+	this.count--;
+	leaf.clearPairs(this);
+	leaf.recycle(this);
+};
+BBTree.prototype.contains = function(obj, hashid)
+{
+	return this.leaves[hashid] != null;
+};
+var voidQueryFunc = function(obj1, obj2){};
+BBTree.prototype.reindexQuery = function(func)
+{
+	if(/*!this ||*/ !this.root) return;
+	var hashid,
+		leaves = this.leaves;
+	for (hashid in leaves)
+	{
+		leaves[hashid].update(this);
+	}
+	var staticIndex = this.staticIndex;
+	var staticRoot = staticIndex && staticIndex.root;
+	this.root.markSubtree(this, staticRoot, func);
+	if(staticIndex && !staticRoot) this.collideStatic(this, staticIndex, func);
+	this.incrementStamp();
+};
+BBTree.prototype.reindex = function()
+{
+	this.reindexQuery(voidQueryFunc);
+};
+BBTree.prototype.reindexObject = function(obj, hashid)
+{
+	var leaf = this.leaves[hashid];
+	if(leaf){
+		if(leaf.update(this)) leaf.addPairs(this);
+		this.incrementStamp();
+	}
+};
+BBTree.prototype.pointQuery = function(point, func)
+{
+	this.query(new BB(point.x, point.y, point.x, point.y), func);
+};
+BBTree.prototype.segmentQuery = function(a, b, t_exit, func)
+{
+	if(this.root) subtreeSegmentQuery(this.root, a, b, t_exit, func);
+};
+BBTree.prototype.query = function(bb, func)
+{
+	if(this && this.root && this instanceof cp.BBTree) subtreeQuery(this.root, bb, func);
+};
+BBTree.prototype.count = function()
+{
+	return this.count;
+};
+BBTree.prototype.each = function(func)
+{
+	var hashid;
+	for(hashid in this.leaves)
+	{
+		func(this.leaves[hashid].obj);
+	}
+};
+var bbTreeMergedArea2 = function(node, l, b, r, t)
+{
+	return (max(node.bb_r, r) - min(node.bb_l, l))*(max(node.bb_t, t) - min(node.bb_b, b));
+};
+var partitionNodes = function(tree, nodes, offset, count)
+{
+	if(count == 1){
+		return nodes[offset];
+	} else if(count == 2) {
+		return tree.makeNode(nodes[offset], nodes[offset + 1]);
+	}
+	var node = nodes[offset];
+	var bb_l = node.bb_l,
+		bb_b = node.bb_b,
+		bb_r = node.bb_r,
+		bb_t = node.bb_t;
+	var end = offset + count;
+	for(var i=offset + 1; i<end; i++){
+		node = nodes[i];
+		bb_l = min(bb_l, node.bb_l);
+		bb_b = min(bb_b, node.bb_b);
+		bb_r = max(bb_r, node.bb_r);
+		bb_t = max(bb_t, node.bb_t);
+	}
+	var splitWidth = (bb_r - bb_l > bb_t - bb_b);
+	var bounds = new Array(count*2);
+	if(splitWidth){
+		for(var i=offset; i<end; i++){
+			bounds[2*i + 0] = nodes[i].bb_l;
+			bounds[2*i + 1] = nodes[i].bb_r;
+		}
+	} else {
+		for(var i=offset; i<end; i++){
+			bounds[2*i + 0] = nodes[i].bb_b;
+			bounds[2*i + 1] = nodes[i].bb_t;
+		}
+	}
+	bounds.sort(function(a, b) {
+		return a - b;
+	});
+	var split = (bounds[count - 1] + bounds[count])*0.5; // use the median as the split
+	var a_l = bb_l, a_b = bb_b, a_r = bb_r, a_t = bb_t;
+	var b_l = bb_l, b_b = bb_b, b_r = bb_r, b_t = bb_t;
+	if(splitWidth) a_r = b_l = split; else a_t = b_b = split;
+	var right = end;
+	for(var left=offset; left < right;){
+		var node = nodes[left];
+		if(bbTreeMergedArea2(node, b_l, b_b, b_r, b_t) < bbTreeMergedArea2(node, a_l, a_b, a_r, a_t)){
+			right--;
+			nodes[left] = nodes[right];
+			nodes[right] = node;
+		} else {
+			left++;
+		}
+	}
+	if(right == count){
+		var node = null;
+		for(var i=offset; i<end; i++) node = subtreeInsert(node, nodes[i], tree);
+		return node;
+	}
+	return NodeNew(tree,
+		partitionNodes(tree, nodes, offset, right - offset),
+		partitionNodes(tree, nodes, right, end - right)
+	);
+};
+BBTree.prototype.optimize = function()
+{
+	var nodes = new Array(this.count);
+	var i = 0;
+	for (var hashid in this.leaves)
+	{
+		nodes[i++] = this.nodes[hashid];
+	}
+	tree.subtreeRecycle(root);
+	this.root = partitionNodes(tree, nodes, nodes.length);
+};
+var nodeRender = function(node, depth)
+{
+	if(!node.isLeaf && depth <= 10){
+		nodeRender(node.A, depth + 1);
+		nodeRender(node.B, depth + 1);
+	}
+	var str = '';
+	for(var i = 0; i < depth; i++) {
+		str += ' ';
+	}
+	console.log(str + node.bb_b + ' ' + node.bb_t);
+};
+BBTree.prototype.log = function(){
+	if(this.root) nodeRender(this.root, 0);
+};
+/*
+static void
+NodeRender(Node *node, int depth)
+{
+	if(!NodeIsLeaf(node) && depth <= 10){
+		NodeRender(node.a, depth + 1);
+		NodeRender(node.b, depth + 1);
+	}
+	bb bb = node.bb;
+	glLineWidth(max(5.0f - depth, 1.0f));
+	glBegin(GL_LINES); {
+		glVertex2f(bb.l, bb.b);
+		glVertex2f(bb.l, bb.t);
+		glVertex2f(bb.l, bb.t);
+		glVertex2f(bb.r, bb.t);
+		glVertex2f(bb.r, bb.t);
+		glVertex2f(bb.r, bb.b);
+		glVertex2f(bb.r, bb.b);
+		glVertex2f(bb.l, bb.b);
+	}; glEnd();
+}
+void
+bbTreeRenderDebug(cpSpatialIndex *index){
+	if(index.klass != &klass){
+		cpAssertWarn(false, "Ignoring bbTreeRenderDebug() call to non-tree spatial index.");
+		return;
+	}
+	bbTree *tree = (bbTree *)index;
+	if(tree.root) NodeRender(tree.root, 0);
+}
+*/
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var CollisionHandler = cp.CollisionHandler = function()
+{
+	this.a = this.b = 0;
+};
+CollisionHandler.prototype.begin = function(arb, space){return true;};
+CollisionHandler.prototype.preSolve = function(arb, space){return true;};
+CollisionHandler.prototype.postSolve = function(arb, space){};
+CollisionHandler.prototype.separate = function(arb, space){};
+var CP_MAX_CONTACTS_PER_ARBITER = 4;
+var Arbiter = function(a, b) {
+	this.e = 0;
+	this.u = 0;
+	this.surface_vr = vzero;
+	this.a = a; this.body_a = a.body;
+	this.b = b; this.body_b = b.body;
+	this.thread_a_next = this.thread_a_prev = null;
+	this.thread_b_next = this.thread_b_prev = null;
+	this.contacts = null;
+	this.stamp = 0;
+	this.handler = null;
+	this.swappedColl = false;
+	this.state = 'first coll';
+};
+Arbiter.prototype.getShapes = function()
+{
+	if (this.swappedColl){
+		return [this.b, this.a];
+	}else{
+		return [this.a, this.b];
+	}
+}
+Arbiter.prototype.totalImpulse = function()
+{
+	var contacts = this.contacts;
+	var sum = new Vect(0,0);
+	for(var i=0, count=contacts.length; i<count; i++){
+		var con = contacts[i];
+		sum.add(vmult(con.n, con.jnAcc));
+	}
+	return this.swappedColl ? sum : sum.neg();
+};
+Arbiter.prototype.totalImpulseWithFriction = function()
+{
+	var contacts = this.contacts;
+	var sum = new Vect(0,0);
+	for(var i=0, count=contacts.length; i<count; i++){
+		var con = contacts[i];
+		sum.add(new Vect(con.jnAcc, con.jtAcc).rotate(con.n));
+	}
+	return this.swappedColl ? sum : sum.neg();
+};
+Arbiter.prototype.totalKE = function()
+{
+	var eCoef = (1 - this.e)/(1 + this.e);
+	var sum = 0;
+	var contacts = this.contacts;
+	for(var i=0, count=contacts.length; i<count; i++){
+		var con = contacts[i];
+		var jnAcc = con.jnAcc;
+		var jtAcc = con.jtAcc;
+		sum += eCoef*jnAcc*jnAcc/con.nMass + jtAcc*jtAcc/con.tMass;
+	}
+	return sum;
+};
+Arbiter.prototype.ignore = function()
+{
+	this.state = 'ignore';
+};
+Arbiter.prototype.getA = function()
+{
+	return this.swappedColl ? this.b : this.a;
+};
+Arbiter.prototype.getB = function()
+{
+	return this.swappedColl ? this.a : this.b;
+};
+Arbiter.prototype.isFirstContact = function()
+{
+	return this.state === 'first coll';
+};
+var ContactPoint = function(point, normal, dist)
+{
+	this.point = point;
+	this.normal = normal;
+	this.dist = dist;
+};
+Arbiter.prototype.getContactPointSet = function()
+{
+	var set = new Array(this.contacts.length);
+	var i;
+	for(i=0; i<set.length; i++){
+		set[i] = new ContactPoint(this.contacts[i].p, this.contacts[i].n, this.contacts[i].dist);
+	}
+	return set;
+};
+Arbiter.prototype.getNormal = function(i)
+{
+	var n = this.contacts[i].n;
+	return this.swappedColl ? vneg(n) : n;
+};
+Arbiter.prototype.getPoint = function(i)
+{
+	return this.contacts[i].p;
+};
+Arbiter.prototype.getDepth = function(i)
+{
+	return this.contacts[i].dist;
+};
+/*
+Arbiter.prototype.threadForBody = function(body)
+{
+	return (this.body_a === body ? this.thread_a : this.thread_b);
+};*/
+var unthreadHelper = function(arb, body, prev, next)
+{
+	if(prev){
+		if(prev.body_a === body) {
+			prev.thread_a_next = next;
+		} else {
+			prev.thread_b_next = next;
+		}
+	} else {
+		body.arbiterList = next;
+	}
+	if(next){
+		if(next.body_a === body){
+			next.thread_a_prev = prev;
+		} else {
+			next.thread_b_prev = prev;
+		}
+	}
+};
+Arbiter.prototype.unthread = function()
+{
+	unthreadHelper(this, this.body_a, this.thread_a_prev, this.thread_a_next);
+	unthreadHelper(this, this.body_b, this.thread_b_prev, this.thread_b_next);
+	this.thread_a_prev = this.thread_a_next = null;
+	this.thread_b_prev = this.thread_b_next = null;
+};
+Arbiter.prototype.update = function(contacts, handler, a, b)
+{
+	if(this.contacts){
+		for(var i=0; i<this.contacts.length; i++){
+			var old = this.contacts[i];
+			for(var j=0; j<contacts.length; j++){
+				var new_contact = contacts[j];
+				if(new_contact.hash === old.hash){
+					new_contact.jnAcc = old.jnAcc;
+					new_contact.jtAcc = old.jtAcc;
+				}
+			}
+		}
+	}
+	this.contacts = contacts;
+	this.handler = handler;
+	this.swappedColl = (a.collision_type !== handler.a);
+	this.e = a.e * b.e;
+	this.u = a.u * b.u;
+	this.surface_vr = vsub(a.surface_v, b.surface_v);
+	this.a = a; this.body_a = a.body;
+	this.b = b; this.body_b = b.body;
+	if(this.state == 'cached') this.state = 'first coll';
+};
+Arbiter.prototype.preStep = function(dt, slop, bias)
+{
+	var a = this.body_a;
+	var b = this.body_b;
+	for(var i=0; i<this.contacts.length; i++){
+		var con = this.contacts[i];
+		con.r1 = vsub(con.p, a.p);
+		con.r2 = vsub(con.p, b.p);
+		con.nMass = 1/k_scalar(a, b, con.r1, con.r2, con.n);
+		con.tMass = 1/k_scalar(a, b, con.r1, con.r2, vperp(con.n));
+		con.bias = -bias*min(0, con.dist + slop)/dt;
+		con.jBias = 0;
+		con.bounce = normal_relative_velocity(a, b, con.r1, con.r2, con.n)*this.e;
+	}
+};
+Arbiter.prototype.applyCachedImpulse = function(dt_coef)
+{
+	if(this.isFirstContact()) return;
+	var a = this.body_a;
+	var b = this.body_b;
+	for(var i=0; i<this.contacts.length; i++){
+		var con = this.contacts[i];
+		var nx = con.n.x;
+		var ny = con.n.y;
+		var jx = nx*con.jnAcc - ny*con.jtAcc;
+		var jy = nx*con.jtAcc + ny*con.jnAcc;
+		apply_impulses(a, b, con.r1, con.r2, jx * dt_coef, jy * dt_coef);
+	}
+};
+var numApplyImpulse = 0;
+var numApplyContact = 0;
+Arbiter.prototype.applyImpulse = function()
+{
+	numApplyImpulse++;
+	var a = this.body_a;
+	var b = this.body_b;
+	var surface_vr = this.surface_vr;
+	var friction = this.u;
+	for(var i=0; i<this.contacts.length; i++){
+		numApplyContact++;
+		var con = this.contacts[i];
+		var nMass = con.nMass;
+		var n = con.n;
+		var r1 = con.r1;
+		var r2 = con.r2;
+		var vrx = b.vx - r2.y * b.w - (a.vx - r1.y * a.w);
+		var vry = b.vy + r2.x * b.w - (a.vy + r1.x * a.w);
+		var vbn = n.x*(b.v_biasx - r2.y * b.w_bias - a.v_biasx + r1.y * a.w_bias) +
+				n.y*(r2.x*b.w_bias + b.v_biasy - r1.x * a.w_bias - a.v_biasy);
+		var vrn = vdot2(vrx, vry, n.x, n.y);
+		var vrt = vdot2(vrx + surface_vr.x, vry + surface_vr.y, -n.y, n.x);
+		var jbn = (con.bias - vbn)*nMass;
+		var jbnOld = con.jBias;
+		con.jBias = max(jbnOld + jbn, 0);
+		var jn = -(con.bounce + vrn)*nMass;
+		var jnOld = con.jnAcc;
+		con.jnAcc = max(jnOld + jn, 0);
+		var jtMax = friction*con.jnAcc;
+		var jt = -vrt*con.tMass;
+		var jtOld = con.jtAcc;
+		con.jtAcc = clamp(jtOld + jt, -jtMax, jtMax);
+		var bias_x = n.x * (con.jBias - jbnOld);
+		var bias_y = n.y * (con.jBias - jbnOld);
+		apply_bias_impulse(a, -bias_x, -bias_y, r1);
+		apply_bias_impulse(b, bias_x, bias_y, r2);
+		var rot_x = con.jnAcc - jnOld;
+		var rot_y = con.jtAcc - jtOld;
+		apply_impulses(a, b, r1, r2, n.x*rot_x - n.y*rot_y, n.x*rot_y + n.y*rot_x);
+	}
+};
+Arbiter.prototype.callSeparate = function(space)
+{
+	var handler = space.lookupHandler(this.a.collision_type, this.b.collision_type);
+	handler.separate(this, space);
+};
+Arbiter.prototype.next = function(body)
+{
+	return (this.body_a == body ? this.thread_a_next : this.thread_b_next);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var numContacts = 0;
+var Contact = function(p, n, dist, hash)
+{
+	this.p = p;
+	this.n = n;
+	this.dist = dist;
+	this.r1 = this.r2 = vzero;
+	this.nMass = this.tMass = this.bounce = this.bias = 0;
+	this.jnAcc = this.jtAcc = this.jBias = 0;
+	this.hash = hash;
+	numContacts++;
+};
+var NONE = [];
+var circle2circleQuery = function(p1, p2, r1, r2)
+{
+	var mindist = r1 + r2;
+	var delta = vsub(p2, p1);
+	var distsq = vlengthsq(delta);
+	if(distsq >= mindist*mindist) return;
+	var dist = Math.sqrt(distsq);
+	return new Contact(
+		vadd(p1, vmult(delta, 0.5 + (r1 - 0.5*mindist)/(dist ? dist : Infinity))),
+		(dist ? vmult(delta, 1/dist) : new Vect(1, 0)),
+		dist - mindist,
+		0
+	);
+};
+var circle2circle = function(circ1, circ2)
+{
+	var contact = circle2circleQuery(circ1.tc, circ2.tc, circ1.r, circ2.r);
+	return contact ? [contact] : NONE;
+};
+var circle2segment = function(circleShape, segmentShape)
+{
+	var seg_a = segmentShape.ta;
+	var seg_b = segmentShape.tb;
+	var center = circleShape.tc;
+	var seg_delta = vsub(seg_b, seg_a);
+	var closest_t = clamp01(vdot(seg_delta, vsub(center, seg_a))/vlengthsq(seg_delta));
+	var closest = vadd(seg_a, vmult(seg_delta, closest_t));
+	var contact = circle2circleQuery(center, closest, circleShape.r, segmentShape.r);
+	if(contact){
+		var n = contact.n;
+		return (
+			(closest_t === 0 && vdot(n, segmentShape.a_tangent) < 0) ||
+			(closest_t === 1 && vdot(n, segmentShape.b_tangent) < 0)
+		) ? NONE : [contact];
+	} else {
+		return NONE;
+	}
+}
+var last_MSA_min = 0;
+var findMSA = function(poly, planes)
+{
+	var min_index = 0;
+	var min = poly.valueOnAxis(planes[0].n, planes[0].d);
+	if(min > 0) return -1;
+	for(var i=1; i<planes.length; i++){
+		var dist = poly.valueOnAxis(planes[i].n, planes[i].d);
+		if(dist > 0) {
+			return -1;
+		} else if(dist > min){
+			min = dist;
+			min_index = i;
+		}
+	}
+	last_MSA_min = min;
+	return min_index;
+};
+var findVertsFallback = function(poly1, poly2, n, dist)
+{
+	var arr = [];
+	var verts1 = poly1.tVerts;
+	for(var i=0; i<verts1.length; i+=2){
+		var vx = verts1[i];
+		var vy = verts1[i+1];
+		if(poly2.containsVertPartial(vx, vy, vneg(n))){
+			arr.push(new Contact(new Vect(vx, vy), n, dist, hashPair(poly1.hashid, i)));
+		}
+	}
+	var verts2 = poly2.tVerts;
+	for(var i=0; i<verts2.length; i+=2){
+		var vx = verts2[i];
+		var vy = verts2[i+1];
+		if(poly1.containsVertPartial(vx, vy, n)){
+			arr.push(new Contact(new Vect(vx, vy), n, dist, hashPair(poly2.hashid, i)));
+		}
+	}
+	return arr;
+};
+var findVerts = function(poly1, poly2, n, dist)
+{
+	var arr = [];
+	var verts1 = poly1.tVerts;
+	for(var i=0; i<verts1.length; i+=2){
+		var vx = verts1[i];
+		var vy = verts1[i+1];
+		if(poly2.containsVert(vx, vy)){
+			arr.push(new Contact(new Vect(vx, vy), n, dist, hashPair(poly1.hashid, i>>1)));
+		}
+	}
+	var verts2 = poly2.tVerts;
+	for(var i=0; i<verts2.length; i+=2){
+		var vx = verts2[i];
+		var vy = verts2[i+1];
+		if(poly1.containsVert(vx, vy)){
+			arr.push(new Contact(new Vect(vx, vy), n, dist, hashPair(poly2.hashid, i>>1)));
+		}
+	}
+	return (arr.length ? arr : findVertsFallback(poly1, poly2, n, dist));
+};
+var poly2poly = function(poly1, poly2)
+{
+	var mini1 = findMSA(poly2, poly1.tPlanes);
+	if(mini1 == -1) return NONE;
+	var min1 = last_MSA_min;
+	var mini2 = findMSA(poly1, poly2.tPlanes);
+	if(mini2 == -1) return NONE;
+	var min2 = last_MSA_min;
+	if(min1 > min2)
+		return findVerts(poly1, poly2, poly1.tPlanes[mini1].n, min1);
+	else
+		return findVerts(poly1, poly2, vneg(poly2.tPlanes[mini2].n), min2);
+};
+var segValueOnAxis = function(seg, n, d)
+{
+	var a = vdot(n, seg.ta) - seg.r;
+	var b = vdot(n, seg.tb) - seg.r;
+	return min(a, b) - d;
+};
+var findPointsBehindSeg = function(arr, seg, poly, pDist, coef)
+{
+	var dta = vcross(seg.tn, seg.ta);
+	var dtb = vcross(seg.tn, seg.tb);
+	var n = vmult(seg.tn, coef);
+	var verts = poly.tVerts;
+	for(var i=0; i<verts.length; i+=2){
+		var vx = verts[i];
+		var vy = verts[i+1];
+		if(vdot2(vx, vy, n.x, n.y) < vdot(seg.tn, seg.ta)*coef + seg.r){
+			var dt = vcross2(seg.tn.x, seg.tn.y, vx, vy);
+			if(dta >= dt && dt >= dtb){
+				arr.push(new Contact(new Vect(vx, vy), n, pDist, hashPair(poly.hashid, i)));
+			}
+		}
+	}
+};
+var seg2poly = function(seg, poly)
+{
+	var arr = [];
+	var planes = poly.tPlanes;
+	var numVerts = planes.length;
+	var segD = vdot(seg.tn, seg.ta);
+	var minNorm = poly.valueOnAxis(seg.tn, segD) - seg.r;
+	var minNeg = poly.valueOnAxis(vneg(seg.tn), -segD) - seg.r;
+	if(minNeg > 0 || minNorm > 0) return NONE;
+	var mini = 0;
+	var poly_min = segValueOnAxis(seg, planes[0].n, planes[0].d);
+	if(poly_min > 0) return NONE;
+	for(var i=0; i<numVerts; i++){
+		var dist = segValueOnAxis(seg, planes[i].n, planes[i].d);
+		if(dist > 0){
+			return NONE;
+		} else if(dist > poly_min){
+			poly_min = dist;
+			mini = i;
+		}
+	}
+	var poly_n = vneg(planes[mini].n);
+	var va = vadd(seg.ta, vmult(poly_n, seg.r));
+	var vb = vadd(seg.tb, vmult(poly_n, seg.r));
+	if(poly.containsVert(va.x, va.y))
+		arr.push(new Contact(va, poly_n, poly_min, hashPair(seg.hashid, 0)));
+	if(poly.containsVert(vb.x, vb.y))
+		arr.push(new Contact(vb, poly_n, poly_min, hashPair(seg.hashid, 1)));
+	if(minNorm >= poly_min || minNeg >= poly_min) {
+		if(minNorm > minNeg)
+			findPointsBehindSeg(arr, seg, poly, minNorm, 1);
+		else
+			findPointsBehindSeg(arr, seg, poly, minNeg, -1);
+	}
+	if(arr.length === 0){
+		var mini2 = mini * 2;
+		var verts = poly.tVerts;
+		var poly_a = new Vect(verts[mini2], verts[mini2+1]);
+		var con;
+		if((con = circle2circleQuery(seg.ta, poly_a, seg.r, 0, arr))) return [con];
+		if((con = circle2circleQuery(seg.tb, poly_a, seg.r, 0, arr))) return [con];
+		var len = numVerts * 2;
+		var poly_b = new Vect(verts[(mini2+2)%len], verts[(mini2+3)%len]);
+		if((con = circle2circleQuery(seg.ta, poly_b, seg.r, 0, arr))) return [con];
+		if((con = circle2circleQuery(seg.tb, poly_b, seg.r, 0, arr))) return [con];
+	}
+	return arr;
+};
+var circle2poly = function(circ, poly)
+{
+	var planes = poly.tPlanes;
+	var mini = 0;
+	var min = vdot(planes[0].n, circ.tc) - planes[0].d - circ.r;
+	for(var i=0; i<planes.length; i++){
+		var dist = vdot(planes[i].n, circ.tc) - planes[i].d - circ.r;
+		if(dist > 0){
+			return NONE;
+		} else if(dist > min) {
+			min = dist;
+			mini = i;
+		}
+	}
+	var n = planes[mini].n;
+	var verts = poly.tVerts;
+	var len = verts.length;
+	var mini2 = mini<<1;
+	var ax = verts[mini2];
+	var ay = verts[mini2+1];
+	var bx = verts[(mini2+2)%len];
+	var by = verts[(mini2+3)%len];
+	var dta = vcross2(n.x, n.y, ax, ay);
+	var dtb = vcross2(n.x, n.y, bx, by);
+	var dt = vcross(n, circ.tc);
+	if(dt < dtb){
+		var con = circle2circleQuery(circ.tc, new Vect(bx, by), circ.r, 0, con);
+		return con ? [con] : NONE;
+	} else if(dt < dta) {
+		return [new Contact(
+			vsub(circ.tc, vmult(n, circ.r + min/2)),
+			vneg(n),
+			min,
+			0
+		)];
+	} else {
+		var con = circle2circleQuery(circ.tc, new Vect(ax, ay), circ.r, 0, con);
+		return con ? [con] : NONE;
+	}
+};
+CircleShape.prototype.collisionCode = 0;
+SegmentShape.prototype.collisionCode = 1;
+PolyShape.prototype.collisionCode = 2;
+CircleShape.prototype.collisionTable = [
+	circle2circle,
+	circle2segment,
+	circle2poly
+];
+SegmentShape.prototype.collisionTable = [
+	null,
+	function(segA, segB) { return NONE; }, // seg2seg
+	seg2poly
+];
+PolyShape.prototype.collisionTable = [
+	null,
+	null,
+	poly2poly
+];
+var collideShapes = cp.collideShapes = function(a, b)
+{
+	assert(a.collisionCode <= b.collisionCode, 'Collided shapes must be sorted by type');
+	return a.collisionTable[b.collisionCode](a, b);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var defaultCollisionHandler = new CollisionHandler();
+var Space = cp.Space = function() {
+	this.stamp = 0;
+	this.curr_dt = 0;
+	this.bodies = [];
+	this.rousedBodies = [];
+	this.sleepingComponents = [];
+	this.staticShapes = new BBTree(null);
+	this.activeShapes = new BBTree(this.staticShapes);
+	this.arbiters = [];
+	this.contactBuffersHead = null;
+	this.cachedArbiters = {};
+	this.constraints = [];
+	this.locked = 0;
+	this.collisionHandlers = {};
+	this.defaultHandler = defaultCollisionHandler;
+	this.postStepCallbacks = [];
+	this.delayedAddRemove = [];
+	this.iterations = 10;
+	this.gravity = vzero;
+	this.damping = 1;
+	this.idleSpeedThreshold = 0;
+	this.sleepTimeThreshold = Infinity;
+	this.collisionSlop = 0.1;
+	this.collisionBias = Math.pow(1 - 0.1, 60);
+	this.collisionPersistence = 3;
+	this.enableContactGraph = false;
+	this.staticBody = new Body(Infinity, Infinity);
+	this.staticBody.nodeIdleTime = Infinity;
+	this.collideShapes = this.makeCollideShapes();
+};
+Space.prototype.getCurrentTimeStep = function() { return this.curr_dt; };
+Space.prototype.setIterations = function(iter) { this.iterations = iter; };
+Space.prototype.isLocked = function()
+{
+	return this.locked;
+};
+var assertSpaceUnlocked = function(space)
+{
+	assert(!space.locked, "This addition/removal cannot be done safely during a call to cpSpaceStep() \
+ or during a query. Put these calls into a post-step callback.");
+};
+Space.prototype.addCollisionHandler = function(a, b, begin, preSolve, postSolve, separate)
+{
+	assertSpaceUnlocked(this);
+	this.removeCollisionHandler(a, b);
+	var handler = new CollisionHandler();
+	handler.a = a;
+	handler.b = b;
+	if(begin) handler.begin = begin;
+	if(preSolve) handler.preSolve = preSolve;
+	if(postSolve) handler.postSolve = postSolve;
+	if(separate) handler.separate = separate;
+	this.collisionHandlers[hashPair(a, b)] = handler;
+};
+Space.prototype.removeCollisionHandler = function(a, b)
+{
+	assertSpaceUnlocked(this);
+	delete this.collisionHandlers[hashPair(a, b)];
+};
+Space.prototype.setDefaultCollisionHandler = function(begin, preSolve, postSolve, separate)
+{
+	assertSpaceUnlocked(this);
+	var handler = new CollisionHandler();
+	if(begin) handler.begin = begin;
+	if(preSolve) handler.preSolve = preSolve;
+	if(postSolve) handler.postSolve = postSolve;
+	if(separate) handler.separate = separate;
+	this.defaultHandler = handler;
+};
+Space.prototype.lookupHandler = function(a, b)
+{
+	return this.collisionHandlers[hashPair(a, b)] || this.defaultHandler;
+};
+Space.prototype.addShape = function(shape)
+{
+	var body = shape.body;
+	if(body.isStatic()) return this.addStaticShape(shape);
+	if(this.locked)
+	{
+		if(!shape.isAdded)
+		{
+			shape.isAdded = true;
+			this.delayedAddRemove.push(this.addShape);
+			this.delayedAddRemove.push(shape);
+		}
+		return shape;
+	}
+	shape.isAdded = true;
+	assert(!shape.space, "This shape is already added to a space and cannot be added to another.");
+	assertSpaceUnlocked(this);
+	body.activate();
+	body.addShape(shape);
+	shape.update(body.p, body.rot);
+	this.activeShapes.insert(shape, shape.hashid);
+	shape.space = this;
+	return shape;
+};
+Space.prototype.addStaticShape = function(shape)
+{
+	if(this.locked)
+	{
+		if(!shape.isAdded)
+		{
+			shape.isAdded = true;
+			this.delayedAddRemove.push(this.addStaticShape);
+			this.delayedAddRemove.push(shape);
+		}
+		return shape;
+	}
+	shape.isAdded = true;
+	assert(!shape.space, "This shape is already added to a space and cannot be added to another.");
+	assertSpaceUnlocked(this);
+	var body = shape.body;
+	body.addShape(shape);
+	shape.update(body.p, body.rot);
+	this.staticShapes.insert(shape, shape.hashid);
+	shape.space = this;
+	return shape;
+};
+Space.prototype.addBody = function(body)
+{
+	assert(!body.isStatic(), "Static bodies cannot be added to a space as they are not meant to be simulated.");
+	if(this.locked)
+	{
+		if(!body.isAdded)
+		{
+			body.isAdded = true;
+			this.delayedAddRemove.push(this.addBody);
+			this.delayedAddRemove.push(body);
+		}
+		return body;
+	}
+	body.isAdded = true;
+	assert(!body.space, "This body is already added to a space and cannot be added to another.");
+	assertSpaceUnlocked(this);
+	this.bodies.push(body);
+	body.space = this;
+	return body;
+};
+Space.prototype.addConstraint = function(constraint)
+{
+	if(this.locked)
+	{
+		if(!constraint.isAdded)
+		{
+			constraint.isAdded = true;
+			this.delayedAddRemove.push(this.addConstraint);
+			this.delayedAddRemove.push(constraint);
+		}
+		return constraint;
+	}
+	constraint.isAdded = true;
+	assert(!constraint.space, "This shape is already added to a space and cannot be added to another.");
+	assertSpaceUnlocked(this);
+	var a = constraint.a, b = constraint.b;
+	a.activate();
+	b.activate();
+	this.constraints.push(constraint);
+	constraint.next_a = a.constraintList; a.constraintList = constraint;
+	constraint.next_b = b.constraintList; b.constraintList = constraint;
+	constraint.space = this;
+	return constraint;
+};
+Space.prototype.filterArbiters = function(body, filter)
+{
+	for (var hash in this.cachedArbiters)
+	{
+		var arb = this.cachedArbiters[hash];
+		if(
+			(body === arb.body_a && (filter === arb.a || filter === null)) ||
+			(body === arb.body_b && (filter === arb.b || filter === null))
+		){
+			if(filter && arb.state !== 'cached') arb.callSeparate(this);
+			arb.unthread();
+			deleteObjFromList(this.arbiters, arb);
+			delete this.cachedArbiters[hash];
+		}
+	}
+};
+Space.prototype.removeShape = function(shape)
+{
+	var body = shape.body;
+	if(body.isStatic()){
+		this.removeStaticShape(shape);
+	} else {
+		if(this.locked)
+		{
+			if(shape.isAdded)
+			{
+				shape.isAdded = false;
+				this.delayedAddRemove.push(this.removeShape);
+				this.delayedAddRemove.push(shape);
+			}
+			return;
+		}
+		shape.isAdded = false;
+		assert(this.containsShape(shape),
+			"Cannot remove a shape that was not added to the space. (Removed twice maybe?)");
+		assertSpaceUnlocked(this);
+		body.activate();
+		body.removeShape(shape);
+		this.filterArbiters(body, shape);
+		this.activeShapes.remove(shape, shape.hashid);
+		shape.space = null;
+	}
+};
+Space.prototype.removeStaticShape = function(shape)
+{
+	if(this.locked)
+	{
+		if(shape.isAdded)
+		{
+			shape.isAdded = false;
+			this.delayedAddRemove.push(this.removeStaticShape);
+			this.delayedAddRemove.push(shape);
+		}
+		return;
+	}
+	shape.isAdded = false;
+	assert(this.containsShape(shape),
+		"Cannot remove a static or sleeping shape that was not added to the space. (Removed twice maybe?)");
+	assertSpaceUnlocked(this);
+	var body = shape.body;
+	if(body.isStatic()) body.activateStatic(shape);
+	body.removeShape(shape);
+	this.filterArbiters(body, shape);
+	this.staticShapes.remove(shape, shape.hashid);
+	shape.space = null;
+};
+Space.prototype.removeBody = function(body)
+{
+	if(this.locked)
+	{
+		if(body.isAdded)
+		{
+			body.isAdded = false;
+			this.delayedAddRemove.push(this.removeBody);
+			this.delayedAddRemove.push(body);
+		}
+		return;
+	}
+	body.isAdded = false;
+	assert(this.containsBody(body),
+		"Cannot remove a body that was not added to the space. (Removed twice maybe?)");
+	assertSpaceUnlocked(this);
+	body.activate();
+	deleteObjFromList(this.bodies, body);
+	body.space = null;
+};
+Space.prototype.removeConstraint = function(constraint)
+{
+	if(this.locked)
+	{
+		if(constraint.isAdded)
+		{
+			constraint.isAdded = false;
+			this.delayedAddRemove.push(this.removeConstraint);
+			this.delayedAddRemove.push(constraint);
+		}
+		return;
+	}
+	constraint.isAdded = false;
+	assert(this.containsConstraint(constraint),
+		"Cannot remove a constraint that was not added to the space. (Removed twice maybe?)");
+	assertSpaceUnlocked(this);
+	constraint.a.activate();
+	constraint.b.activate();
+	deleteObjFromList(this.constraints, constraint);
+	constraint.a.removeConstraint(constraint);
+	constraint.b.removeConstraint(constraint);
+	constraint.space = null;
+};
+Space.prototype.containsShape = function(shape)
+{
+	return (shape.space === this);
+};
+Space.prototype.containsBody = function(body)
+{
+	return (body.space == this);
+};
+Space.prototype.containsConstraint = function(constraint)
+{
+	return (constraint.space == this);
+};
+Space.prototype.uncacheArbiter = function(arb)
+{
+	delete this.cachedArbiters[hashPair(arb.a.hashid, arb.b.hashid)];
+	deleteObjFromList(this.arbiters, arb);
+};
+Space.prototype.eachBody = function(func, mythis)
+{
+	this.lock(); {
+		var bodies = this.bodies;
+		for(var i=0; i<bodies.length; i++){
+			func.call(mythis, bodies[i]);
+		}
+		var components = this.sleepingComponents;
+		for(var i=0; i<components.length; i++){
+			var root = components[i];
+			var body = root;
+			while(body){
+				var next = body.nodeNext;
+				func.call(mythis, body);
+				body = next;
+			}
+		}
+	} this.unlock(true);
+};
+Space.prototype.eachShape = function(func)
+{
+	this.lock(); {
+		this.activeShapes.each(func);
+		this.staticShapes.each(func);
+	} this.unlock(true);
+};
+Space.prototype.eachConstraint = function(func)
+{
+	this.lock(); {
+		var constraints = this.constraints;
+		for(var i=0; i<constraints.length; i++){
+			func(constraints[i]);
+		}
+	} this.unlock(true);
+};
+Space.prototype.reindexStatic = function()
+{
+	assert(!this.locked, "You cannot manually reindex objects while the space is locked. Wait until the current query or step is complete.");
+	this.staticShapes.each(function(shape){
+		var body = shape.body;
+		shape.update(body.p, body.rot);
+	});
+	this.staticShapes.reindex();
+};
+Space.prototype.reindexShape = function(shape)
+{
+	assert(!this.locked, "You cannot manually reindex objects while the space is locked. Wait until the current query or step is complete.");
+	var body = shape.body;
+	shape.update(body.p, body.rot);
+	this.activeShapes.reindexObject(shape, shape.hashid);
+	this.staticShapes.reindexObject(shape, shape.hashid);
+};
+Space.prototype.reindexShapesForBody = function(body)
+{
+	for(var shape = body.shapeList; shape; shape = shape.next){
+		this.reindexShape(shape);
+	}
+};
+Space.prototype.useSpatialHash = function(dim, count)
+{
+	throw new Error('Spatial Hash not implemented.');
+	var staticShapes = new SpaceHash(dim, count, null);
+	var activeShapes = new SpaceHash(dim, count, staticShapes);
+	this.staticShapes.each(function(shape){
+		staticShapes.insert(shape, shape.hashid);
+	});
+	this.activeShapes.each(function(shape){
+		activeShapes.insert(shape, shape.hashid);
+	});
+	this.staticShapes = staticShapes;
+	this.activeShapes = activeShapes;
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+Space.prototype.activateBody = function(body)
+{
+	assert(!body.isRogue(), "Internal error: Attempting to activate a rogue body.");
+	if(this.locked){
+		if(this.rousedBodies.indexOf(body) === -1) this.rousedBodies.push(body);
+	} else {
+		this.bodies.push(body);
+		for(var i = 0; i < body.shapeList.length; i++){
+			var shape = body.shapeList[i];
+			this.staticShapes.remove(shape, shape.hashid);
+			this.activeShapes.insert(shape, shape.hashid);
+		}
+		for(var arb = body.arbiterList; arb; arb = arb.next(body)){
+			var bodyA = arb.body_a;
+			if(body === bodyA || bodyA.isStatic()){
+				var a = arb.a, b = arb.b;
+				this.cachedArbiters[hashPair(a.hashid, b.hashid)] = arb;
+				arb.stamp = this.stamp;
+				arb.handler = this.lookupHandler(a.collision_type, b.collision_type);
+				this.arbiters.push(arb);
+			}
+		}
+		for(var constraint = body.constraintList; constraint; constraint = constraint.nodeNext){
+			var bodyA = constraint.a;
+			if(body === bodyA || bodyA.isStatic()) this.constraints.push(constraint);
+		}
+	}
+};
+Space.prototype.deactivateBody = function(body)
+{
+	assert(!body.isRogue(), "Internal error: Attempting to deactivate a rogue body.");
+	deleteObjFromList(this.bodies, body);
+	for(var i = 0; i < body.shapeList.length; i++){
+		var shape = body.shapeList[i];
+		this.activeShapes.remove(shape, shape.hashid);
+		this.staticShapes.insert(shape, shape.hashid);
+	}
+	for(var arb = body.arbiterList; arb; arb = arb.next(body)){
+		var bodyA = arb.body_a;
+		if(body === bodyA || bodyA.isStatic()){
+			this.uncacheArbiter(arb);
+		}
+	}
+	for(var constraint = body.constraintList; constraint; constraint = constraint.nodeNext){
+		var bodyA = constraint.a;
+		if(body === bodyA || bodyA.isStatic()) deleteObjFromList(this.constraints, constraint);
+	}
+};
+var componentRoot = function(body)
+{
+	return (body ? body.nodeRoot : null);
+};
+var componentActivate = function(root)
+{
+	if(!root || !root.isSleeping(root)) return;
+	assert(!root.isRogue(), "Internal Error: componentActivate() called on a rogue body.");
+	var space = root.space;
+	var body = root;
+	while(body){
+		var next = body.nodeNext;
+		body.nodeIdleTime = 0;
+		body.nodeRoot = null;
+		body.nodeNext = null;
+		space.activateBody(body);
+		body = next;
+	}
+	deleteObjFromList(space.sleepingComponents, root);
+};
+Body.prototype.activate = function()
+{
+	if(!this.isRogue()){
+		this.nodeIdleTime = 0;
+		componentActivate(componentRoot(this));
+	}
+};
+Body.prototype.activateStatic = function(filter)
+{
+	assert(this.isStatic(), "Body.activateStatic() called on a non-static body.");
+	for(var arb = this.arbiterList; arb; arb = arb.next(this)){
+		if(!filter || filter == arb.a || filter == arb.b){
+			(arb.body_a == this ? arb.body_b : arb.body_a).activate();
+		}
+	}
+};
+Body.prototype.pushArbiter = function(arb)
+{
+	assertSoft((arb.body_a === this ? arb.thread_a_next : arb.thread_b_next) === null,
+		"Internal Error: Dangling contact graph pointers detected. (A)");
+	assertSoft((arb.body_a === this ? arb.thread_a_prev : arb.thread_b_prev) === null,
+		"Internal Error: Dangling contact graph pointers detected. (B)");
+	var next = this.arbiterList;
+	assertSoft(next === null || (next.body_a === this ? next.thread_a_prev : next.thread_b_prev) === null,
+		"Internal Error: Dangling contact graph pointers detected. (C)");
+	if(arb.body_a === this){
+		arb.thread_a_next = next;
+	} else {
+		arb.thread_b_next = next;
+	}
+	if(next){
+		if (next.body_a === this){
+			next.thread_a_prev = arb;
+		} else {
+			next.thread_b_prev = arb;
+		}
+	}
+	this.arbiterList = arb;
+};
+var componentAdd = function(root, body){
+	body.nodeRoot = root;
+	if(body !== root){
+		body.nodeNext = root.nodeNext;
+		root.nodeNext = body;
+	}
+};
+var floodFillComponent = function(root, body)
+{
+	if(!body.isRogue()){
+		var other_root = componentRoot(body);
+		if(other_root == null){
+			componentAdd(root, body);
+			for(var arb = body.arbiterList; arb; arb = arb.next(body)){
+				floodFillComponent(root, (body == arb.body_a ? arb.body_b : arb.body_a));
+			}
+			for(var constraint = body.constraintList; constraint; constraint = constraint.next(body)){
+				floodFillComponent(root, (body == constraint.a ? constraint.b : constraint.a));
+			}
+		} else {
+			assertSoft(other_root === root, "Internal Error: Inconsistency detected in the contact graph.");
+		}
+	}
+};
+var componentActive = function(root, threshold)
+{
+	for(var body = root; body; body = body.nodeNext){
+		if(body.nodeIdleTime < threshold) return true;
+	}
+	return false;
+};
+Space.prototype.processComponents = function(dt)
+{
+	var sleep = (this.sleepTimeThreshold !== Infinity);
+	var bodies = this.bodies;
+	for(var i=0; i<bodies.length; i++){
+		var body = bodies[i];
+		assertSoft(body.nodeNext === null, "Internal Error: Dangling next pointer detected in contact graph.");
+		assertSoft(body.nodeRoot === null, "Internal Error: Dangling root pointer detected in contact graph.");
+	}
+	if(sleep){
+		var dv = this.idleSpeedThreshold;
+		var dvsq = (dv ? dv*dv : vlengthsq(this.gravity)*dt*dt);
+		for(var i=0; i<bodies.length; i++){
+			var body = bodies[i];
+			if( body.m !== Infinity)
+			{
+				var keThreshold = (dvsq ? body.m*dvsq : 0);
+				body.nodeIdleTime = (body.kineticEnergy() > keThreshold ? 0 : body.nodeIdleTime + dt);
+			}
+			else
+				body.nodeIdleTime = Infinity;
+		}
+	}
+	var arbiters = this.arbiters;
+	for(var i=0, count=arbiters.length; i<count; i++){
+		var arb = arbiters[i];
+		var a = arb.body_a, b = arb.body_b;
+		if(sleep){
+			if((b.isRogue() && !b.isStatic()) || a.isSleeping()) a.activate();
+			if((a.isRogue() && !a.isStatic()) || b.isSleeping()) b.activate();
+		}
+		a.pushArbiter(arb);
+		b.pushArbiter(arb);
+	}
+	if(sleep){
+		var constraints = this.constraints;
+		for(var i=0; i<constraints.length; i++){
+			var constraint = constraints[i];
+			var a = constraint.a, b = constraint.b;
+			if(b.isRogue() && !b.isStatic()) a.activate();
+			if(a.isRogue() && !a.isStatic()) b.activate();
+		}
+		for(var i=0; i<bodies.length;){
+			var body = bodies[i];
+			if(componentRoot(body) === null){
+				floodFillComponent(body, body);
+				if(!componentActive(body, this.sleepTimeThreshold)){
+					this.sleepingComponents.push(body);
+					for(var other = body; other; other = other.nodeNext){
+						this.deactivateBody(other);
+					}
+					continue;
+				}
+			}
+			i++;
+			body.nodeRoot = null;
+			body.nodeNext = null;
+		}
+	}
+};
+Body.prototype.sleep = function()
+{
+	this.sleepWithGroup(null);
+};
+Body.prototype.sleepWithGroup = function(group){
+	assert(!this.isStatic() && !this.isRogue(), "Rogue and static bodies cannot be put to sleep.");
+	var space = this.space;
+	assert(space, "Cannot put a rogue body to sleep.");
+	assert(!space.locked, "Bodies cannot be put to sleep during a query or a call to cpSpaceStep(). Put these calls into a post-step callback.");
+	assert(group === null || group.isSleeping(), "Cannot use a non-sleeping body as a group identifier.");
+	if(this.isSleeping()){
+		assert(componentRoot(this) === componentRoot(group), "The body is already sleeping and it's group cannot be reassigned.");
+		return;
+	}
+	for(var i = 0; i < this.shapeList.length; i++){
+		this.shapeList[i].update(this.p, this.rot);
+	}
+	space.deactivateBody(this);
+	if(group){
+		var root = componentRoot(group);
+		this.nodeRoot = root;
+		this.nodeNext = root.nodeNext;
+		this.nodeIdleTime = 0;
+		root.nodeNext = this;
+	} else {
+		this.nodeRoot = this;
+		this.nodeNext = null;
+		this.nodeIdleTime = 0;
+		space.sleepingComponents.push(this);
+	}
+	deleteObjFromList(space.bodies, this);
+};
+Space.prototype.activateShapesTouchingShape = function(shape){
+	if(this.sleepTimeThreshold !== Infinity){
+		this.shapeQuery(shape, function(shape, points) {
+			shape.body.activate();
+		});
+	}
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+Space.prototype.pointQuery = function(point, layers, group, func)
+{
+	var helper = function(shape){
+		if(
+			!(shape.group && group === shape.group) && (layers & shape.layers) &&
+			shape.pointQuery(point)
+		){
+			func(shape);
+		}
+	};
+	var bb = new BB(point.x, point.y, point.x, point.y);
+	this.lock(); {
+		this.activeShapes.query(bb, helper);
+		this.staticShapes.query(bb, helper);
+	} this.unlock(true);
+};
+Space.prototype.pointQueryFirst = function(point, layers, group)
+{
+	var outShape = null;
+	this.pointQuery(point, layers, group, function(shape) {
+		if(!shape.sensor) outShape = shape;
+	});
+	return outShape;
+};
+Space.prototype.nearestPointQuery = function(point, maxDistance, layers, group, func)
+{
+	var helper = function(shape){
+		if(!(shape.group && group === shape.group) && (layers & shape.layers)){
+			var info = shape.nearestPointQuery(point);
+			if(info.d < maxDistance) func(shape, info.d, info.p);
+		}
+	};
+	var bb = bbNewForCircle(point, maxDistance);
+	this.lock(); {
+		this.activeShapes.query(bb, helper);
+		this.staticShapes.query(bb, helper);
+	} this.unlock(true);
+};
+Space.prototype.nearestPointQueryNearest = function(point, maxDistance, layers, group)
+{
+	var out;
+	var helper = function(shape){
+		if(!(shape.group && group === shape.group) && (layers & shape.layers) && !shape.sensor){
+			var info = shape.nearestPointQuery(point);
+			if(info.d < maxDistance && (!out || info.d < out.d)) out = info;
+		}
+	};
+	var bb = bbNewForCircle(point, maxDistance);
+	this.activeShapes.query(bb, helper);
+	this.staticShapes.query(bb, helper);
+	return out;
+};
+Space.prototype.segmentQuery = function(start, end, layers, group, func)
+{
+	var helper = function(shape){
+		var info;
+		if(
+			!(shape.group && group === shape.group) && (layers & shape.layers) &&
+			(info = shape.segmentQuery(start, end))
+		){
+			func(shape, info.t, info.n);
+		}
+		return 1;
+	};
+	this.lock(); {
+		this.staticShapes.segmentQuery(start, end, 1, helper);
+		this.activeShapes.segmentQuery(start, end, 1, helper);
+	} this.unlock(true);
+};
+Space.prototype.segmentQueryFirst = function(start, end, layers, group)
+{
+	var out = null;
+	var helper = function(shape){
+		var info;
+		if(
+			!(shape.group && group === shape.group) && (layers & shape.layers) &&
+			!shape.sensor &&
+			(info = shape.segmentQuery(start, end)) &&
+			(out === null || info.t < out.t)
+		){
+			out = info;
+		}
+		return out ? out.t : 1;
+	};
+	this.staticShapes.segmentQuery(start, end, 1, helper);
+	this.activeShapes.segmentQuery(start, end, out ? out.t : 1, helper);
+	return out;
+};
+Space.prototype.bbQuery = function(bb, layers, group, func)
+{
+	var helper = function(shape){
+		if(
+			!(shape.group && group === shape.group) && (layers & shape.layers) &&
+			bbIntersects2(bb, shape.bb_l, shape.bb_b, shape.bb_r, shape.bb_t)
+		){
+			func(shape);
+		}
+	};
+	this.lock(); {
+		this.activeShapes.query(bb, helper);
+		this.staticShapes.query(bb, helper);
+	} this.unlock(true);
+};
+Space.prototype.shapeQuery = function(shape, func)
+{
+	var body = shape.body;
+	if(body){
+		shape.update(body.p, body.rot);
+	}
+	var bb = new BB(shape.bb_l, shape.bb_b, shape.bb_r, shape.bb_t);
+	var anyCollision = false;
+	var helper = function(b){
+		var a = shape;
+		if(
+			(a.group && a.group === b.group) ||
+			!(a.layers & b.layers) ||
+			a === b
+		) return;
+		var contacts;
+		if(a.collisionCode <= b.collisionCode){
+			contacts = collideShapes(a, b);
+		} else {
+			contacts = collideShapes(b, a);
+			for(var i=0; i<contacts.length; i++) contacts[i].n = vneg(contacts[i].n);
+		}
+		if(contacts.length){
+			anyCollision = !(a.sensor || b.sensor);
+			if(func){
+				var set = new Array(contacts.length);
+				for(var i=0; i<contacts.length; i++){
+					set[i] = new ContactPoint(contacts[i].p, contacts[i].n, contacts[i].dist);
+				}
+				func(b, set);
+			}
+		}
+	};
+	this.lock(); {
+		this.activeShapes.query(bb, helper);
+		this.staticShapes.query(bb, helper);
+	} this.unlock(true);
+	return anyCollision;
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+Space.prototype.addPostStepCallback = function(func)
+{
+	assertSoft(this.locked,
+		"Adding a post-step callback when the space is not locked is unnecessary. " +
+		"Post-step callbacks will not called until the end of the next call to cpSpaceStep() or the next query.");
+	this.postStepCallbacks.push(func);
+};
+Space.prototype.runPostStepCallbacks = function()
+{
+	for(var i = 0; i < this.postStepCallbacks.length; i++){
+		this.postStepCallbacks[i]();
+	}
+	this.postStepCallbacks.length = 0; // = [];
+};
+Space.prototype.lock = function()
+{
+	this.locked++;
+};
+Space.prototype.unlock = function(runPostStep)
+{
+	this.locked--;
+	assert(this.locked >= 0, "Internal Error: Space lock underflow.");
+	if(this.locked === 0 && runPostStep){
+		var waking = this.rousedBodies;
+		for(var i=0; i<waking.length; i++){
+			this.activateBody(waking[i]);
+		}
+		waking.length = 0;
+		this.runPostStepCallbacks();
+	}
+};
+/* josephg:
+ *
+ * This code might be faster in JS than just allocating objects each time - I'm
+ * really not sure. If the contact buffer solution is used, there will also
+ * need to be changes in cpCollision.js to fill a passed array instead of creating
+ * new arrays each time.
+ *
+ * TODO: Benchmark me once chipmunk is working.
+ */
+/*
+var ContactBuffer = function(stamp, splice)
+{
+	this.stamp = stamp;
+	this.next = splice ? splice.next : this;
+	this.contacts = [];
+};
+Space.prototype.pushFreshContactBuffer = function()
+{
+	var stamp = this.stamp;
+	var head = this.contactBuffersHead;
+	if(!head){
+		this.contactBuffersHead = new ContactBuffer(stamp, null);
+	} else if(stamp - head.next.stamp > this.collisionPersistence){
+		var tail = head.next;
+		tail.stamp = stamp;
+		tail.contacts.length = 0;
+		this.contactBuffersHead = tail;
+	} else {
+		var buffer = new ContactBuffer(stamp, head);
+		this.contactBuffersHead = head.next = buffer;
+	}
+};
+cpContact *
+cpContactBufferGetArray(cpSpace *space)
+{
+	if(space.contactBuffersHead.numContacts + CP_MAX_CONTACTS_PER_ARBITER > CP_CONTACTS_BUFFER_SIZE){
+		space.pushFreshContactBuffer();
+	}
+	cpContactBufferHeader *head = space.contactBuffersHead;
+	return ((cpContactBuffer *)head)->contacts + head.numContacts;
+}
+void
+cpSpacePushContacts(cpSpace *space, int count)
+{
+	cpAssertHard(count <= CP_MAX_CONTACTS_PER_ARBITER, "Internal Error: Contact buffer overflow!");
+	space.contactBuffersHead.numContacts += count;
+}
+static void
+cpSpacePopContacts(cpSpace *space, int count){
+	space.contactBuffersHead.numContacts -= count;
+}
+*/
+/* Use this to re-enable object pools.
+static void *
+cpSpaceArbiterSetTrans(cpShape **shapes, cpSpace *space)
+{
+	if(space.pooledArbiters.num == 0){
+		int count = CP_BUFFER_BYTES/sizeof(cpArbiter);
+		cpAssertHard(count, "Internal Error: Buffer size too small.");
+		cpArbiter *buffer = (cpArbiter *)cpcalloc(1, CP_BUFFER_BYTES);
+		cpArrayPush(space.allocatedBuffers, buffer);
+		for(int i=0; i<count; i++) cpArrayPush(space.pooledArbiters, buffer + i);
+	}
+	return cpArbiterInit((cpArbiter *)cpArrayPop(space.pooledArbiters), shapes[0], shapes[1]);
+}*/
+var space_;
+var anon_func = function(a, b){
+	var space = space_;
+	if(
+		!(a.bb_l <= b.bb_r && b.bb_l <= a.bb_r && a.bb_b <= b.bb_t && b.bb_b <= a.bb_t)
+		|| a.body === b.body
+		|| (a.group && a.group === b.group)
+		|| !(a.layers & b.layers)
+	) return;
+	var handler = space.lookupHandler(a.collision_type, b.collision_type);
+	var sensor = a.sensor || b.sensor;
+	if(sensor && handler === defaultCollisionHandler) return;
+	if(a.collisionCode > b.collisionCode){
+		var temp = a;
+		a = b;
+		b = temp;
+	}
+	var contacts = collideShapes(a, b);
+	if(contacts.length === 0) return; // Shapes are not colliding.
+	var arbHash = hashPair(a.hashid, b.hashid);
+	var arb = space.cachedArbiters[arbHash];
+	if (!arb){
+		arb = space.cachedArbiters[arbHash] = new Arbiter(a, b);
+	}
+	arb.update(contacts, handler, a, b);
+	if(arb.state == 'first coll' && !handler.begin(arb, space)){
+		arb.ignore(); // permanently ignore the collision until separation
+	}
+	if(
+		(arb.state !== 'ignore') &&
+		handler.preSolve(arb, space) &&
+		!sensor
+	){
+		space.arbiters.push(arb);
+	} else {
+		arb.contacts = null;
+		if(arb.state !== 'ignore') arb.state = 'normal';
+	}
+	arb.stamp = space.stamp;
+};
+Space.prototype.makeCollideShapes = function()
+{
+	space_ = this;
+	return anon_func;
+};
+Space.prototype.arbiterSetFilter = function(arb)
+{
+	var ticks = this.stamp - arb.stamp;
+	var a = arb.body_a, b = arb.body_b;
+	if(
+		(a.isStatic() || a.isSleeping()) &&
+		(b.isStatic() || b.isSleeping())
+	){
+		return true;
+	}
+	if(ticks >= 1 && arb.state != 'cached'){
+		arb.callSeparate(this);
+		arb.state = 'cached';
+	}
+	if(ticks >= this.collisionPersistence){
+		arb.contacts = null;
+		return false;
+	}
+	return true;
+};
+var updateFunc = function(shape)
+{
+	var body = shape.body;
+	shape.update(body.p, body.rot);
+};
+Space.prototype.step = function(dt)
+{
+	if(dt === 0) return;
+	assert(vzero.x === 0 && vzero.y === 0, "vzero is invalid");
+	this.stamp++;
+	var prev_dt = this.curr_dt;
+	this.curr_dt = dt;
+    var i;
+    var j;
+    var hash;
+	var bodies = this.bodies;
+	var constraints = this.constraints;
+	var arbiters = this.arbiters;
+	for(i=0; i<arbiters.length; i++){
+		var arb = arbiters[i];
+		arb.state = 'normal';
+		if(!arb.body_a.isSleeping() && !arb.body_b.isSleeping()){
+			arb.unthread();
+		}
+	}
+	arbiters.length = 0;
+	this.lock(); {
+		for(i=0; i<bodies.length; i++){
+			bodies[i].position_func(dt);
+		}
+		this.activeShapes.each(updateFunc);
+		this.activeShapes.reindexQuery(this.collideShapes);
+	} this.unlock(false);
+	this.processComponents(dt);
+	this.lock(); {
+		for(hash in this.cachedArbiters) {
+			if(!this.arbiterSetFilter(this.cachedArbiters[hash])) {
+				delete this.cachedArbiters[hash];
+			}
+		}
+		var slop = this.collisionSlop;
+		var biasCoef = 1 - Math.pow(this.collisionBias, dt);
+		for(i=0; i<arbiters.length; i++){
+			arbiters[i].preStep(dt, slop, biasCoef);
+		}
+		for(i=0; i<constraints.length; i++){
+			var constraint = constraints[i];
+			constraint.preSolve(this);
+			constraint.preStep(dt);
+		}
+		var damping = Math.pow(this.damping, dt);
+		var gravity = this.gravity;
+		for(i=0; i<bodies.length; i++){
+			bodies[i].velocity_func(gravity, damping, dt);
+		}
+		var dt_coef = (prev_dt === 0 ? 0 : dt/prev_dt);
+		for(i=0; i<arbiters.length; i++){
+			arbiters[i].applyCachedImpulse(dt_coef);
+		}
+		for(i=0; i<constraints.length; i++){
+			constraints[i].applyCachedImpulse(dt_coef);
+		}
+		for(i=0; i<this.iterations; i++){
+			for(j=0; j<arbiters.length; j++){
+				arbiters[j].applyImpulse();
+			}
+			for(j=0; j<constraints.length; j++){
+				constraints[j].applyImpulse();
+			}
+		}
+		for(i=0; i<constraints.length; i++){
+			constraints[i].postSolve(this);
+		}
+		for(i=0; i<arbiters.length; i++){
+			arbiters[i].handler.postSolve(arbiters[i], this);
+		}
+	} this.unlock(true);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var relative_velocity = function(a, b, r1, r2){
+	var v1_sumx = a.vx + (-r1.y) * a.w;
+	var v1_sumy = a.vy + ( r1.x) * a.w;
+	var v2_sumx = b.vx + (-r2.y) * b.w;
+	var v2_sumy = b.vy + ( r2.x) * b.w;
+	return new Vect(v2_sumx - v1_sumx, v2_sumy - v1_sumy);
+};
+var normal_relative_velocity = function(a, b, r1, r2, n){
+	var v1_sumx = a.vx + (-r1.y) * a.w;
+	var v1_sumy = a.vy + ( r1.x) * a.w;
+	var v2_sumx = b.vx + (-r2.y) * b.w;
+	var v2_sumy = b.vy + ( r2.x) * b.w;
+	return vdot2(v2_sumx - v1_sumx, v2_sumy - v1_sumy, n.x, n.y);
+};
+/*
+var apply_impulse = function(body, j, r){
+	body.v = vadd(body.v, vmult(j, body.m_inv));
+	body.w += body.i_inv*vcross(r, j);
+};
+var apply_impulses = function(a, b, r1, r2, j)
+{
+	apply_impulse(a, vneg(j), r1);
+	apply_impulse(b, j, r2);
+};
+*/
+var apply_impulse = function(body, jx, jy, r){
+	body.vx += jx * body.m_inv;
+	body.vy += jy * body.m_inv;
+	body.w += body.i_inv*(r.x*jy - r.y*jx);
+};
+var apply_impulses = function(a, b, r1, r2, jx, jy)
+{
+	apply_impulse(a, -jx, -jy, r1);
+	apply_impulse(b, jx, jy, r2);
+};
+var apply_bias_impulse = function(body, jx, jy, r)
+{
+	body.v_biasx += jx * body.m_inv;
+	body.v_biasy += jy * body.m_inv;
+	body.w_bias += body.i_inv*vcross2(r.x, r.y, jx, jy);
+};
+/*
+var apply_bias_impulses = function(a, b, r1, r2, j)
+{
+	apply_bias_impulse(a, vneg(j), r1);
+	apply_bias_impulse(b, j, r2);
+};*/
+var k_scalar_body = function(body, r, n)
+{
+	var rcn = vcross(r, n);
+	return body.m_inv + body.i_inv*rcn*rcn;
+};
+var k_scalar = function(a, b, r1, r2, n)
+{
+	var value = k_scalar_body(a, r1, n) + k_scalar_body(b, r2, n);
+	assertSoft(value !== 0, "Unsolvable collision or constraint.");
+	return value;
+};
+var k_tensor = function(a, b, r1, r2, k1, k2)
+{
+	var k11, k12, k21, k22;
+	var m_sum = a.m_inv + b.m_inv;
+	k11 = m_sum; k12 = 0;
+	k21 = 0;     k22 = m_sum;
+	var a_i_inv = a.i_inv;
+	var r1xsq =  r1.x * r1.x * a_i_inv;
+	var r1ysq =  r1.y * r1.y * a_i_inv;
+	var r1nxy = -r1.x * r1.y * a_i_inv;
+	k11 += r1ysq; k12 += r1nxy;
+	k21 += r1nxy; k22 += r1xsq;
+	var b_i_inv = b.i_inv;
+	var r2xsq =  r2.x * r2.x * b_i_inv;
+	var r2ysq =  r2.y * r2.y * b_i_inv;
+	var r2nxy = -r2.x * r2.y * b_i_inv;
+	k11 += r2ysq; k12 += r2nxy;
+	k21 += r2nxy; k22 += r2xsq;
+	var determinant = k11*k22 - k12*k21;
+	assertSoft(determinant !== 0, "Unsolvable constraint.");
+	var det_inv = 1/determinant;
+	k1.x =  k22*det_inv; k1.y = -k12*det_inv;
+	k2.x = -k21*det_inv; k2.y =  k11*det_inv;
+};
+var mult_k = function(vr, k1, k2)
+{
+	return new Vect(vdot(vr, k1), vdot(vr, k2));
+};
+var bias_coef = function(errorBias, dt)
+{
+	return 1 - Math.pow(errorBias, dt);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var Constraint = cp.Constraint = function(a, b)
+{
+	this.a = a;
+	this.b = b;
+	this.space = null;
+	this.isAdded = false;
+	this.next_a = null;
+	this.next_b = null;
+	this.maxForce = Infinity;
+	this.errorBias = Math.pow(1 - 0.1, 60);
+	this.maxBias = Infinity;
+};
+Constraint.prototype.activateBodies = function()
+{
+	if(this.a) this.a.activate();
+	if(this.b) this.b.activate();
+};
+Constraint.prototype.preStep = function(dt) {};
+Constraint.prototype.applyCachedImpulse = function(dt_coef) {};
+Constraint.prototype.applyImpulse = function() {};
+Constraint.prototype.getImpulse = function() { return 0; };
+Constraint.prototype.preSolve = function(space) {};
+Constraint.prototype.postSolve = function(space) {};
+Constraint.prototype.next = function(body)
+{
+	return (this.a === body ? this.next_a : this.next_b);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var PinJoint = cp.PinJoint = function(a, b, anchr1, anchr2)
+{
+	Constraint.call(this, a, b);
+	this.anchr1 = anchr1;
+	this.anchr2 = anchr2;
+	var p1 = (a ? vadd(a.p, vrotate(anchr1, a.rot)) : anchr1);
+	var p2 = (b ? vadd(b.p, vrotate(anchr2, b.rot)) : anchr2);
+	this.dist = vlength(vsub(p2, p1));
+	assertSoft(this.dist > 0, "You created a 0 length pin joint. A pivot joint will be much more stable.");
+	this.r1 = this.r2 = null;
+	this.n = null;
+	this.nMass = 0;
+	this.jnAcc = this.jnMax = 0;
+	this.bias = 0;
+};
+PinJoint.prototype = Object.create(Constraint.prototype);
+PinJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	this.r1 = vrotate(this.anchr1, a.rot);
+	this.r2 = vrotate(this.anchr2, b.rot);
+	var delta = vsub(vadd(b.p, this.r2), vadd(a.p, this.r1));
+	var dist = vlength(delta);
+	this.n = vmult(delta, 1/(dist ? dist : Infinity));
+	this.nMass = 1/k_scalar(a, b, this.r1, this.r2, this.n);
+	var maxBias = this.maxBias;
+	this.bias = clamp(-bias_coef(this.errorBias, dt)*(dist - this.dist)/dt, -maxBias, maxBias);
+	this.jnMax = this.maxForce * dt;
+};
+PinJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var j = vmult(this.n, this.jnAcc*dt_coef);
+	apply_impulses(this.a, this.b, this.r1, this.r2, j.x, j.y);
+};
+PinJoint.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var n = this.n;
+	var vrn = normal_relative_velocity(a, b, this.r1, this.r2, n);
+	var jn = (this.bias - vrn)*this.nMass;
+	var jnOld = this.jnAcc;
+	this.jnAcc = clamp(jnOld + jn, -this.jnMax, this.jnMax);
+	jn = this.jnAcc - jnOld;
+	apply_impulses(a, b, this.r1, this.r2, n.x*jn, n.y*jn);
+};
+PinJoint.prototype.getImpulse = function()
+{
+	return Math.abs(this.jnAcc);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var SlideJoint = cp.SlideJoint = function(a, b, anchr1, anchr2, min, max)
+{
+	Constraint.call(this, a, b);
+	this.anchr1 = anchr1;
+	this.anchr2 = anchr2;
+	this.min = min;
+	this.max = max;
+	this.r1 = this.r2 = this.n = null;
+	this.nMass = 0;
+	this.jnAcc = this.jnMax = 0;
+	this.bias = 0;
+};
+SlideJoint.prototype = Object.create(Constraint.prototype);
+SlideJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	this.r1 = vrotate(this.anchr1, a.rot);
+	this.r2 = vrotate(this.anchr2, b.rot);
+	var delta = vsub(vadd(b.p, this.r2), vadd(a.p, this.r1));
+	var dist = vlength(delta);
+	var pdist = 0;
+	if(dist > this.max) {
+		pdist = dist - this.max;
+		this.n = vnormalize_safe(delta);
+	} else if(dist < this.min) {
+		pdist = this.min - dist;
+		this.n = vneg(vnormalize_safe(delta));
+	} else {
+		this.n = vzero;
+		this.jnAcc = 0;
+	}
+	this.nMass = 1/k_scalar(a, b, this.r1, this.r2, this.n);
+	var maxBias = this.maxBias;
+	this.bias = clamp(-bias_coef(this.errorBias, dt)*pdist/dt, -maxBias, maxBias);
+	this.jnMax = this.maxForce * dt;
+};
+SlideJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var jn = this.jnAcc * dt_coef;
+	apply_impulses(this.a, this.b, this.r1, this.r2, this.n.x * jn, this.n.y * jn);
+};
+SlideJoint.prototype.applyImpulse = function()
+{
+	if(this.n.x === 0 && this.n.y === 0) return;  // early exit
+	var a = this.a;
+	var b = this.b;
+	var n = this.n;
+	var r1 = this.r1;
+	var r2 = this.r2;
+	var vr = relative_velocity(a, b, r1, r2);
+	var vrn = vdot(vr, n);
+	var jn = (this.bias - vrn)*this.nMass;
+	var jnOld = this.jnAcc;
+	this.jnAcc = clamp(jnOld + jn, -this.jnMax, 0);
+	jn = this.jnAcc - jnOld;
+	apply_impulses(a, b, this.r1, this.r2, n.x * jn, n.y * jn);
+};
+SlideJoint.prototype.getImpulse = function()
+{
+	return Math.abs(this.jnAcc);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var PivotJoint = cp.PivotJoint = function(a, b, anchr1, anchr2)
+{
+	Constraint.call(this, a, b);
+	if(typeof anchr2 === 'undefined') {
+		var pivot = anchr1;
+		anchr1 = (a ? a.world2Local(pivot) : pivot);
+		anchr2 = (b ? b.world2Local(pivot) : pivot);
+	}
+	this.anchr1 = anchr1;
+	this.anchr2 = anchr2;
+	this.r1 = this.r2 = vzero;
+	this.k1 = new Vect(0,0); this.k2 = new Vect(0,0);
+	this.jAcc = vzero;
+	this.jMaxLen = 0;
+	this.bias = vzero;
+};
+PivotJoint.prototype = Object.create(Constraint.prototype);
+PivotJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	this.r1 = vrotate(this.anchr1, a.rot);
+	this.r2 = vrotate(this.anchr2, b.rot);
+	k_tensor(a, b, this.r1, this.r2, this.k1, this.k2);
+	this.jMaxLen = this.maxForce * dt;
+	var delta = vsub(vadd(b.p, this.r2), vadd(a.p, this.r1));
+	this.bias = vclamp(vmult(delta, -bias_coef(this.errorBias, dt)/dt), this.maxBias);
+};
+PivotJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	apply_impulses(this.a, this.b, this.r1, this.r2, this.jAcc.x * dt_coef, this.jAcc.y * dt_coef);
+};
+PivotJoint.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var r1 = this.r1;
+	var r2 = this.r2;
+	var vr = relative_velocity(a, b, r1, r2);
+	var j = mult_k(vsub(this.bias, vr), this.k1, this.k2);
+	var jOld = this.jAcc;
+	this.jAcc = vclamp(vadd(this.jAcc, j), this.jMaxLen);
+	apply_impulses(a, b, this.r1, this.r2, this.jAcc.x - jOld.x, this.jAcc.y - jOld.y);
+};
+PivotJoint.prototype.getImpulse = function()
+{
+	return vlength(this.jAcc);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var GrooveJoint = cp.GrooveJoint = function(a, b, groove_a, groove_b, anchr2)
+{
+	Constraint.call(this, a, b);
+	this.grv_a = groove_a;
+	this.grv_b = groove_b;
+	this.grv_n = vperp(vnormalize(vsub(groove_b, groove_a)));
+	this.anchr2 = anchr2;
+	this.grv_tn = null;
+	this.clamp = 0;
+	this.r1 = this.r2 = null;
+	this.k1 = new Vect(0,0);
+	this.k2 = new Vect(0,0);
+	this.jAcc = vzero;
+	this.jMaxLen = 0;
+	this.bias = null;
+};
+GrooveJoint.prototype = Object.create(Constraint.prototype);
+GrooveJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	var ta = a.local2World(this.grv_a);
+	var tb = a.local2World(this.grv_b);
+	var n = vrotate(this.grv_n, a.rot);
+	var d = vdot(ta, n);
+	this.grv_tn = n;
+	this.r2 = vrotate(this.anchr2, b.rot);
+	var td = vcross(vadd(b.p, this.r2), n);
+	if(td <= vcross(ta, n)){
+		this.clamp = 1;
+		this.r1 = vsub(ta, a.p);
+	} else if(td >= vcross(tb, n)){
+		this.clamp = -1;
+		this.r1 = vsub(tb, a.p);
+	} else {
+		this.clamp = 0;
+		this.r1 = vsub(vadd(vmult(vperp(n), -td), vmult(n, d)), a.p);
+	}
+	k_tensor(a, b, this.r1, this.r2, this.k1, this.k2);
+	this.jMaxLen = this.maxForce * dt;
+	var delta = vsub(vadd(b.p, this.r2), vadd(a.p, this.r1));
+	this.bias = vclamp(vmult(delta, -bias_coef(this.errorBias, dt)/dt), this.maxBias);
+};
+GrooveJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	apply_impulses(this.a, this.b, this.r1, this.r2, this.jAcc.x * dt_coef, this.jAcc.y * dt_coef);
+};
+GrooveJoint.prototype.grooveConstrain = function(j){
+	var n = this.grv_tn;
+	var jClamp = (this.clamp*vcross(j, n) > 0) ? j : vproject(j, n);
+	return vclamp(jClamp, this.jMaxLen);
+};
+GrooveJoint.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var r1 = this.r1;
+	var r2 = this.r2;
+	var vr = relative_velocity(a, b, r1, r2);
+	var j = mult_k(vsub(this.bias, vr), this.k1, this.k2);
+	var jOld = this.jAcc;
+	this.jAcc = this.grooveConstrain(vadd(jOld, j));
+	apply_impulses(a, b, this.r1, this.r2, this.jAcc.x - jOld.x, this.jAcc.y - jOld.y);
+};
+GrooveJoint.prototype.getImpulse = function()
+{
+	return vlength(this.jAcc);
+};
+GrooveJoint.prototype.setGrooveA = function(value)
+{
+	this.grv_a = value;
+	this.grv_n = vperp(vnormalize(vsub(this.grv_b, value)));
+	this.activateBodies();
+};
+GrooveJoint.prototype.setGrooveB = function(value)
+{
+	this.grv_b = value;
+	this.grv_n = vperp(vnormalize(vsub(value, this.grv_a)));
+	this.activateBodies();
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var defaultSpringForce = function(spring, dist){
+	return (spring.restLength - dist)*spring.stiffness;
+};
+var DampedSpring = cp.DampedSpring = function(a, b, anchr1, anchr2, restLength, stiffness, damping)
+{
+	Constraint.call(this, a, b);
+	this.anchr1 = anchr1;
+	this.anchr2 = anchr2;
+	this.restLength = restLength;
+	this.stiffness = stiffness;
+	this.damping = damping;
+	this.springForceFunc = defaultSpringForce;
+	this.target_vrn = this.v_coef = 0;
+	this.r1 = this.r2 = null;
+	this.nMass = 0;
+	this.n = null;
+};
+DampedSpring.prototype = Object.create(Constraint.prototype);
+DampedSpring.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	this.r1 = vrotate(this.anchr1, a.rot);
+	this.r2 = vrotate(this.anchr2, b.rot);
+	var delta = vsub(vadd(b.p, this.r2), vadd(a.p, this.r1));
+	var dist = vlength(delta);
+	this.n = vmult(delta, 1/(dist ? dist : Infinity));
+	var k = k_scalar(a, b, this.r1, this.r2, this.n);
+	assertSoft(k !== 0, "Unsolvable this.");
+	this.nMass = 1/k;
+	this.target_vrn = 0;
+	this.v_coef = 1 - Math.exp(-this.damping*dt*k);
+	var f_spring = this.springForceFunc(this, dist);
+	apply_impulses(a, b, this.r1, this.r2, this.n.x * f_spring * dt, this.n.y * f_spring * dt);
+};
+DampedSpring.prototype.applyCachedImpulse = function(dt_coef){};
+DampedSpring.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var n = this.n;
+	var r1 = this.r1;
+	var r2 = this.r2;
+	var vrn = normal_relative_velocity(a, b, r1, r2, n);
+	var v_damp = (this.target_vrn - vrn)*this.v_coef;
+	this.target_vrn = vrn + v_damp;
+	v_damp *= this.nMass;
+	apply_impulses(a, b, this.r1, this.r2, this.n.x * v_damp, this.n.y * v_damp);
+};
+DampedSpring.prototype.getImpulse = function()
+{
+	return 0;
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var defaultSpringTorque = function(spring, relativeAngle){
+	return (relativeAngle - spring.restAngle)*spring.stiffness;
+}
+var DampedRotarySpring = cp.DampedRotarySpring = function(a, b, restAngle, stiffness, damping)
+{
+	Constraint.call(this, a, b);
+	this.restAngle = restAngle;
+	this.stiffness = stiffness;
+	this.damping = damping;
+	this.springTorqueFunc = defaultSpringTorque;
+	this.target_wrn = 0;
+	this.w_coef = 0;
+	this.iSum = 0;
+};
+DampedRotarySpring.prototype = Object.create(Constraint.prototype);
+DampedRotarySpring.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	var moment = a.i_inv + b.i_inv;
+	assertSoft(moment !== 0, "Unsolvable spring.");
+	this.iSum = 1/moment;
+	this.w_coef = 1 - Math.exp(-this.damping*dt*moment);
+	this.target_wrn = 0;
+	var j_spring = this.springTorqueFunc(this, a.a - b.a)*dt;
+	a.w -= j_spring*a.i_inv;
+	b.w += j_spring*b.i_inv;
+};
+DampedRotarySpring.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var wrn = a.w - b.w;//normal_relative_velocity(a, b, r1, r2, n) - this.target_vrn;
+	var w_damp = (this.target_wrn - wrn)*this.w_coef;
+	this.target_wrn = wrn + w_damp;
+	var j_damp = w_damp*this.iSum;
+	a.w += j_damp*a.i_inv;
+	b.w -= j_damp*b.i_inv;
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var RotaryLimitJoint = cp.RotaryLimitJoint = function(a, b, min, max)
+{
+	Constraint.call(this, a, b);
+	this.min = min;
+	this.max = max;
+	this.jAcc = 0;
+	this.iSum = this.bias = this.jMax = 0;
+};
+RotaryLimitJoint.prototype = Object.create(Constraint.prototype);
+RotaryLimitJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	var dist = b.a - a.a;
+	var pdist = 0;
+	if(dist > this.max) {
+		pdist = this.max - dist;
+	} else if(dist < this.min) {
+		pdist = this.min - dist;
+	}
+	this.iSum = 1/(1/a.i + 1/b.i);
+	var maxBias = this.maxBias;
+	this.bias = clamp(-bias_coef(this.errorBias, dt)*pdist/dt, -maxBias, maxBias);
+	this.jMax = this.maxForce * dt;
+	if(!this.bias) this.jAcc = 0;
+};
+RotaryLimitJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var a = this.a;
+	var b = this.b;
+	var j = this.jAcc*dt_coef;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+RotaryLimitJoint.prototype.applyImpulse = function()
+{
+	if(!this.bias) return; // early exit
+	var a = this.a;
+	var b = this.b;
+	var wr = b.w - a.w;
+	var j = -(this.bias + wr)*this.iSum;
+	var jOld = this.jAcc;
+	if(this.bias < 0){
+		this.jAcc = clamp(jOld + j, 0, this.jMax);
+	} else {
+		this.jAcc = clamp(jOld + j, -this.jMax, 0);
+	}
+	j = this.jAcc - jOld;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+RotaryLimitJoint.prototype.getImpulse = function()
+{
+	return Math.abs(joint.jAcc);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var RatchetJoint = cp.RatchetJoint = function(a, b, phase, ratchet)
+{
+	Constraint.call(this, a, b);
+	this.angle = 0;
+	this.phase = phase;
+	this.ratchet = ratchet;
+	this.angle = (b ? b.a : 0) - (a ? a.a : 0);
+	this.iSum = this.bias = this.jAcc = this.jMax = 0;
+};
+RatchetJoint.prototype = Object.create(Constraint.prototype);
+RatchetJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	var angle = this.angle;
+	var phase = this.phase;
+	var ratchet = this.ratchet;
+	var delta = b.a - a.a;
+	var diff = angle - delta;
+	var pdist = 0;
+	if(diff*ratchet > 0){
+		pdist = diff;
+	} else {
+		this.angle = Math.floor((delta - phase)/ratchet)*ratchet + phase;
+	}
+	this.iSum = 1/(a.i_inv + b.i_inv);
+	var maxBias = this.maxBias;
+	this.bias = clamp(-bias_coef(this.errorBias, dt)*pdist/dt, -maxBias, maxBias);
+	this.jMax = this.maxForce * dt;
+	if(!this.bias) this.jAcc = 0;
+};
+RatchetJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var a = this.a;
+	var b = this.b;
+	var j = this.jAcc*dt_coef;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+RatchetJoint.prototype.applyImpulse = function()
+{
+	if(!this.bias) return; // early exit
+	var a = this.a;
+	var b = this.b;
+	var wr = b.w - a.w;
+	var ratchet = this.ratchet;
+	var j = -(this.bias + wr)*this.iSum;
+	var jOld = this.jAcc;
+	this.jAcc = clamp((jOld + j)*ratchet, 0, this.jMax*Math.abs(ratchet))/ratchet;
+	j = this.jAcc - jOld;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+RatchetJoint.prototype.getImpulse = function(joint)
+{
+	return Math.abs(joint.jAcc);
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var GearJoint = cp.GearJoint = function(a, b, phase, ratio)
+{
+	Constraint.call(this, a, b);
+	this.phase = phase;
+	this.ratio = ratio;
+	this.ratio_inv = 1/ratio;
+	this.jAcc = 0;
+	this.iSum = this.bias = this.jMax = 0;
+};
+GearJoint.prototype = Object.create(Constraint.prototype);
+GearJoint.prototype.preStep = function(dt)
+{
+	var a = this.a;
+	var b = this.b;
+	if(a.isRogue() && b.isRogue())
+		return;
+	this.iSum = 1/(a.i_inv*this.ratio_inv + this.ratio*b.i_inv);
+	var maxBias = this.maxBias;
+	this.bias = clamp(-bias_coef(this.errorBias, dt)*(b.a*this.ratio - a.a - this.phase)/dt, -maxBias, maxBias);
+	this.jMax = this.maxForce * dt;
+};
+GearJoint.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var a = this.a;
+	var b = this.b;
+	var j = this.jAcc*dt_coef;
+	a.w -= j*a.i_inv*this.ratio_inv;
+	b.w += j*b.i_inv;
+};
+GearJoint.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var wr = b.w*this.ratio - a.w;
+	var j = (this.bias - wr)*this.iSum;
+	var jOld = this.jAcc;
+	this.jAcc = clamp(jOld + j, -this.jMax, this.jMax);
+	j = this.jAcc - jOld;
+	a.w -= j*a.i_inv*this.ratio_inv;
+	b.w += j*b.i_inv;
+};
+GearJoint.prototype.getImpulse = function()
+{
+	return Math.abs(this.jAcc);
+};
+GearJoint.prototype.setRatio = function(value)
+{
+	this.ratio = value;
+	this.ratio_inv = 1/value;
+	this.activateBodies();
+};
+/* Copyright (c) 2007 Scott Lembcke
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+var SimpleMotor = cp.SimpleMotor = function(a, b, rate)
+{
+	Constraint.call(this, a, b);
+	this.rate = rate;
+	this.jAcc = 0;
+	this.iSum = this.jMax = 0;
+};
+SimpleMotor.prototype = Object.create(Constraint.prototype);
+SimpleMotor.prototype.preStep = function(dt)
+{
+	this.iSum = 1/(this.a.i_inv + this.b.i_inv);
+	this.jMax = this.maxForce * dt;
+};
+SimpleMotor.prototype.applyCachedImpulse = function(dt_coef)
+{
+	var a = this.a;
+	var b = this.b;
+	var j = this.jAcc*dt_coef;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+SimpleMotor.prototype.applyImpulse = function()
+{
+	var a = this.a;
+	var b = this.b;
+	var wr = b.w - a.w + this.rate;
+	var j = -wr*this.iSum;
+	var jOld = this.jAcc;
+	this.jAcc = clamp(jOld + j, -this.jMax, this.jMax);
+	j = this.jAcc - jOld;
+	a.w -= j*a.i_inv;
+	b.w += j*b.i_inv;
+};
+SimpleMotor.prototype.getImpulse = function()
+{
+	return Math.abs(this.jAcc);
+};
+})();
+function isReversed(tri)
+{
+    var A = tri[0];
+    var B = tri[1];
+    var C = tri[2];
+    var v1 = cp.v.sub(B, A);
+    var v2 = cp.v.sub(C, B);
+    return cp.v.cross(v1, v2) <0;
+}
+function pointsInTriangle (poly, tri)
+{
+    var pnt, result;
+    for(var i=0; i<poly.length; ++i)
+    {
+        pnt = poly[i];
+        if(tri.indexOf(pnt)!=-1)
+            continue;
+        result = pointInTriangle(pnt, tri);
+        if(result)
+            return true;
+    }
+    return false;
+}
+function pointInTriangle (pnt, tri)
+{
+    var P = pnt;
+    var A = tri[0];
+    var B = tri[1];
+    var C = tri[2];
+    var v0 = cp.v.sub(C, A);
+    var v1 = cp.v.sub(B, A);
+    var v2 = cp.v.sub(P, A);
+    var dot00 = cp.v.dot(v0, v0);
+    var dot01 = cp.v.dot(v0, v1);
+    var dot02 = cp.v.dot(v0, v2);
+    var dot11 = cp.v.dot(v1, v1);
+    var dot12 = cp.v.dot(v1, v2);
+    var invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+    var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    return (u >= 0) && (v >= 0) && (u + v < 1);
+}
+function triangulate (source_poly)
+{
+	var poly = source_poly.slice(0);
+	var triangles = [];
+	var i = 0, tri;
+	while (poly.length >= 3)
+	{
+		tri = [poly[i],
+			   poly[(i+1)%poly.length],
+			   poly[(i+2)%poly.length]
+			  ];
+		if (!isReversed(tri) && !pointsInTriangle(poly, tri))
+		{
+			poly.splice((i+1)%poly.length, 1); //remove point
+			triangles.push(tri);
+		}
+		else
+			i++;
+		i = i%poly.length;
+	}
+	return triangles;
+}
+function add_tri_2_poly (poly, tri)
+{
+    var i, found_cnt=0;
+    var not_found;
+    var after_not_found;
+    for(i=0; i<3; i++)
+    {
+        if( poly.indexOf(tri[i]) == -1)
+        {
+            not_found = tri[i];
+            after_not_found = tri[(i+1)%3];
+        }
+        else
+            found_cnt++;
+    }
+    if ( found_cnt != 2)
+        return false;
+    i = poly.indexOf(after_not_found);
+    var len = poly.length;
+    if ( isReversed([poly[(i-2+len)%len], poly[(i-1+len)%len], not_found]) ||
+         isReversed([not_found, poly[i], poly[(i+1)%len]]) )
+    {
+        return false;
+    }
+    poly.splice(i, 0, not_found);
+    return true;
+}
+function triangles2convex (source_triangles)
+{
+	var triangles = source_triangles;//.slice(0);
+	var convex_polys = [];
+	while (triangles.length>0)
+	{
+		var convex = triangles[0];
+		triangles.shift();
+		for(var i=0; i<triangles.length; i++)
+		{
+			if(add_tri_2_poly(convex, triangles[i]))
+			{
+				triangles.splice(i, 1);
+				i=-1; //reset loop
+			}
+		}
+		convex_polys.push(convex);
+	}
+	return convex_polys;
+}
+;
+;
+cr.behaviors.rojoChipmunkBeta = function(runtime)
+{
+	this.runtime = runtime;
+	var space = this.space = new cp.Space();
+	var mypreSolve = function(arb, space)
+	{
+		if(arb.isFirstContact()) //todo trigger once?
+		{
+			var binstA = arb.getA().body.c2obj;
+			var binstB = arb.getB().body.c2obj;
+			binstA.Arbiter = arb;
+			binstA.swapped = false;
+			binstB.Arbiter = arb;
+			binstB.swapped = true;
+			runtime.trigger(cr.behaviors.rojoChipmunkBeta.prototype.cnds.onPreCollide, binstA.inst);
+			runtime.trigger(cr.behaviors.rojoChipmunkBeta.prototype.cnds.onPreCollide, binstB.inst);
+			binstA.Arbiter = null;
+			binstB.Arbiter = null;
+		}
+		return (arb.state !== 'ignore');
+	};
+	var mypostSolve = function(arb, space)
+	{
+		if(arb.isFirstContact()) //todo trigger once?
+		{
+			var binstA = arb.getA().body.c2obj;
+			var binstB = arb.getB().body.c2obj;
+			binstA.Arbiter = arb;
+			binstA.swapped = false;
+			binstB.Arbiter = arb;
+			binstB.swapped = true;
+			runtime.trigger(cr.behaviors.rojoChipmunkBeta.prototype.cnds.onPostCollide, binstA.inst);
+			runtime.trigger(cr.behaviors.rojoChipmunkBeta.prototype.cnds.onPostCollide, binstB.inst);
+			binstA.Arbiter = null;
+			binstB.Arbiter = null;
+		}
+		return true;
+	};
+	space.addCollisionHandler(0, 0, null, mypreSolve, mypostSolve, null);
+	space.gravity = cp.v(0, 100);
+	space.fixed_step = 1/30;
+	space.stepping_mode = 0; //0 fixed, 1 variable
+	space.sleepTimeThreshold = 1.0;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.rojoChipmunkBeta.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+		this.behavior.lastUpdateTick = -1;
+		this.behavior.rogues = [];
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+		this.space = this.behavior.space;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	var TILE_FLIPPED_HORIZONTAL = -0x80000000
+	var TILE_FLIPPED_VERTICAL =    0x40000000
+	var TILE_FLIPPED_DIAGONAL =    0x20000000
+	var TILE_FLAGS_MASK =          0xE0000000
+	behinstProto.updateTileMap = function()
+	{
+		if (this.col_shape === 0 || this.col_shape === 2 || this.col_shape === 4)
+			return;
+		var inst = this.inst;
+		var collrects = [];
+		inst.update_bbox();
+		inst.getAllCollisionRects(collrects);
+		var i, len, c, rc;
+		var offset;
+		var shape;
+		for (i = 0, len = collrects.length; i < len; ++i)
+		{
+			c = collrects[i];
+			rc = c.rc;
+			if (c.poly && this.col_shape === 3) //3 is poly
+			{
+				if (!c.poly.cp_convexpolys)
+				{
+					var flags = (c.id & TILE_FLAGS_MASK);
+					 var flip = flags === TILE_FLIPPED_HORIZONTAL || flags === TILE_FLIPPED_VERTICAL || flags === TILE_FLIPPED_DIAGONAL ||
+						((flags & TILE_FLIPPED_HORIZONTAL) && (flags & TILE_FLIPPED_VERTICAL) && (flags & TILE_FLIPPED_DIAGONAL));
+					c.poly.cp_convexpolys = this.getConvexPolygons(c.poly, flip);
+				}
+				offset = cp.v(rc.left, rc.top);
+				var polys = c.poly.cp_convexpolys;
+				for(var j=0; j<polys.length; ++j)
+				{
+					this.shapes.push( new cp.PolyShape(this.body, polys[j], offset));
+				}
+			}
+			else
+			{
+				offset = cp.v(0, 0);
+				var verts = [
+					rc.left, rc.top,
+					rc.left, rc.bottom,
+					rc.right, rc.bottom,
+					rc.right, rc.top
+				];
+				this.shapes.push(new cp.PolyShape(this.body, verts, offset));
+			}
+		}
+		for(i = 0, len = this.shapes.length; i < len; ++i)
+		{
+			shape = this.shapes[i];
+			shape.group = this.col_group;
+			shape.layers = this.col_layers;
+			shape.setElasticity(this.elasticity);
+			shape.setFriction(this.friction);
+			if(this.enabled)
+				this.space.addShape(shape);
+		}
+	};
+	behinstProto.getConvexPolygons = function(collision_poly, flip)
+	{
+		var pts_cache = collision_poly.pts_cache;
+		var pts_count = collision_poly.pts_count;
+		var points = [];
+		points.length = pts_count;
+		for (i = 0; i < pts_count; i++)
+			points[i] = cp.v(pts_cache[i*2], pts_cache[i*2+1]);
+		if (flip)
+			points.reverse();
+		var convexList = triangles2convex(triangulate(points));
+		var polyList = [];
+		for(var i=0; i<convexList.length; ++i)
+		{
+			var convex = convexList[i].reverse();
+			var verts=[];
+			verts.length = convex.length*2;
+			for(var j=0; j<convex.length; ++j)
+			{
+				verts[2*j] = convex[j].x;
+				verts[2*j+1] = convex[j].y;
+			}
+			polyList.push(verts);
+		}
+		return polyList;
+	};
+	behinstProto.updateShape = function()
+	{
+		var shapes = this.shapes;
+		if(this.enabled)
+		{
+			for(var i=0, len=shapes.length; i<len; i++)
+			{
+				this.space.removeShape(shapes[i]);
+			}
+		}
+		shapes.length = 0;
+		this.updateCOM(this.body);
+		if (this.inst.tilemap_exists)
+		{
+			this.total_poly_area = 0;
+			this.updateTileMap();
+			this.no_rotation = true;
+			this.body.setMoment(Infinity);
+			return;
+		}
+		var col_shape = this.col_shape;
+		if (col_shape == 3 && (!this.inst.collision_poly || this.inst.collision_poly.is_empty()))
+			col_shape = 1;  //poly failed, use box
+		var w = Math.abs(this.inst.width);
+		var h = Math.abs(this.inst.height);
+		var i, shape;
+		switch(col_shape)
+		{
+			case 0: //none
+				this.inertia = 1;
+				break;
+			case 1: //box
+				this.inertia = cp.momentForBox(this.mass, w, h);
+				shapes.push( new cp.BoxShape(this.body, w, h));
+				break;
+			case 2: //circle
+				this.inertia = cp.momentForCircle(this.mass, w/2, 0, cp.v(0,0));
+				shapes.push( new cp.CircleShape(this.body, h/2, cp.v(0,0)));
+				break;
+			case 3: //poly
+				this.inst.collision_poly.cache_poly(this.inst.width, this.inst.height, 0);
+				var flip = (this.inst.width<0) != (this.inst.height<0);
+				var polys = this.getConvexPolygons(this.inst.collision_poly, flip);
+				cp.centroidForPoly(this.inst.collision_poly);
+				this.total_poly_area = 0;
+				for(i=0; i<polys.length; ++i)
+				{
+					shape = new cp.PolyShape(this.body, polys[i], this.offset);
+					shape.area = cp.areaForPoly(polys[i]);
+					this.total_poly_area += shape.area;
+					shapes.push(shape);
+				}
+				var temp_inertia = 0;
+				var percentage;
+				for(i=0; i<shapes.length; ++i)
+				{
+					percentage = shapes[i].area/this.total_poly_area;
+					temp_inertia += cp.momentForPoly(percentage*this.mass, polys[i], this.offset);
+				}
+				this.inertia = temp_inertia;
+				break;
+			case 4: //segment
+				var deltaX = 0;
+				if (this.edgeRadius < 0) // inset so segment stays inside obb
+					deltaX = -this.edgeRadius;
+				var p1 = cp.v(-w/2+deltaX, 0);
+				var p2 = cp.v( w/2-deltaX, 0);
+				this.inertia = cp.momentForSegment(this.mass, p1, p2);
+				shapes.push( new cp.SegmentShape(this.body, p1, p2, Math.abs(this.edgeRadius)));
+				break;
+		}
+		if(this.inertia <= 0)
+			this.inertia = 1;
+		if (this.immovable || this.no_rotation)
+			this.body.setMoment(Infinity);
+		else
+			this.body.setMoment(this.inertia);
+		if(!this.body.isRogue())
+		{
+			this.body.activate();
+		}
+		for(i=0; i<shapes.length; ++i)
+		{
+			shape = shapes[i];
+			shape.group = this.col_group;
+			shape.layers = this.col_layers;
+			shape.setElasticity(this.elasticity);
+			shape.setFriction(this.friction);
+			if(this.enabled)
+				this.space.addShape(shape);
+		}
+	};
+	behinstProto.onCreate = function()
+	{
+		this.immovable = this.properties[0] == 1; //immovable
+		this.col_shape = this.properties[1];
+		this.col_group = this.properties[2];
+		this.col_layers = parseInt(this.properties[3], 16);
+		this.mass = this.properties[4];
+		this.inertia = 1;
+		this.elasticity = this.properties[5];
+		this.friction = this.properties[6];
+		this.enabled = this.properties[7] == 0;
+		this.edgeRadius = this.properties[8];
+		this.no_rotation = this.properties[9] == 1;
+		this.invalidateShape = true;
+		this.updateStatic = false;
+		this.offset = cp.v(0,0);
+		this.last_x = 0;
+		this.last_y = 0;
+		this.last_angle = 0;
+		this.last_hotspotX = 0;
+		this.last_hotspotY = 0;
+		this.last_width = 0;
+		this.last_height = 0;
+		this.last_anim = null;
+		this.last_anim_frame = -1;
+		this.queryInfo = null;
+		this.Arbiter = null;
+		this.swapped = false;
+		this.total_poly_area = 0;  //for polygons and tilemaps only
+		var body;
+		if (this.immovable)//static/rogue
+		{
+			body = this.body = new cp.Body(Infinity, Infinity);
+			if (this.enabled)
+				this.behavior.rogues.push(body);
+			body.nodeIdleTime = Infinity; //this makes it static
+		}
+		else//dynamic
+		{
+			body = this.body = new cp.Body(this.mass, 1);
+			if (this.enabled)
+				this.space.addBody(body);
+		}
+		body.wasForceApplied = false;
+		body.c2obj = this;
+		this.inst.chipmunkbetabody = body; //for reference later
+		this.shapes = [];
+	};
+	behinstProto.postCreate = function ()
+	{
+		this.changeShapeCheck(this.body);
+	};
+	behinstProto.onDestroy = function ()
+	{
+		if(this.enabled)
+		{
+			for(var i = 0; i < this.shapes.length; i++)
+			{
+				this.space.removeShape(this.shapes[i]);
+			}
+		}
+		this.shapes.length = 0;
+		var self=this;
+		this.body.eachConstraint(function(joint){self.space.removeConstraint(joint)});
+		if (this.body.isRogue())
+			cr.arrayFindRemove(this.behavior.rogues, this.body);
+		else
+			this.space.removeBody(this.body);
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+	};
+	behinstProto.recalcOffset = function(body)
+	{
+		var binst = body.c2obj;
+		var inst = binst.inst;
+		inst.update_bbox();
+		if (inst.tilemap_exists)
+		{
+			binst.offset = cp.v(0,0);
+		}
+		else
+		{
+			binst.offset = cp.v((inst.hotspotX-0.5) * inst.width, (inst.hotspotY-0.5) * inst.height);
+		}
+	};
+	behinstProto.updateCOM = function(body)
+	{
+		var binst = body.c2obj;
+		var inst = binst.inst;
+		var sizeChanged = false;
+		inst.update_bbox();
+		if(binst.last_width !== inst.width || binst.last_height !== inst.height)
+		{
+			sizeChanged = true;
+			binst.invalidateShape = true;
+			binst.last_width = inst.width;
+			binst.last_height = inst.height;
+		}
+		if(sizeChanged || binst.last_x !== inst.x || binst.last_y !== inst.y || binst.last_angle !== inst.angle
+			|| binst.last_hotspotX !== inst.hotspotX || binst.last_hotspotY !== inst.hotspotY)
+		{
+			if (inst.tilemap_exists)
+			{
+				body.setPos(cp.v(inst.x , inst.y));
+			}
+			else
+			{
+				binst.offset = cp.v((inst.hotspotX-0.5) * inst.width, (inst.hotspotY-0.5) * inst.height);
+				body.setAngle(inst.angle);
+				body.setPos(cp.v.sub(cp.v(inst.x , inst.y), cp.v.rotate(binst.offset, body.rot)));
+			}
+			if (body.isStatic())
+			{
+				binst.updateStatic = true;
+				body.activateStatic();
+			}
+			binst.last_x = inst.x;
+			binst.last_y = inst.y;
+			binst.last_angle = inst.angle;
+			binst.last_hotspotX = inst.hotspotX;
+			binst.last_hotspotY = inst.hotspotY;
+		}
+	};
+	behinstProto.updateC2 = function(body)
+	{
+		var binst = body.c2obj;
+		var inst = binst.inst;
+		if(body.wasForceApplied)
+		{
+			body.resetForces();
+			body.wasForceApplied = false;
+		}
+		if(body.isRogue())
+			return;
+		binst.updateCOM(body);
+		var pos = cp.v.add(body.getPos(), cp.v.rotate(binst.offset, body.rot));
+		binst.last_x = inst.x = pos.x;
+		binst.last_y = inst.y = pos.y;
+		binst.last_angle = inst.angle = body.getAngle();
+		inst.set_bbox_changed();
+	};
+	behinstProto.changeShapeCheck = function (body)
+	{
+		var binst = body.c2obj;
+		if (!binst.enabled)
+			return;
+		if (binst.invalidateShape ||
+			(binst.inst.tilemap_exists && binst.inst.physics_changed) ||
+			binst.last_width !== binst.inst.width ||
+			(binst.col_shape !==4 && binst.last_height !== binst.inst.height) ||
+			(binst.col_shape === 3 &&
+			(binst.last_anim !== binst.inst.cur_animation ||
+			binst.last_anim_frame !== binst.inst.cur_frame)))
+		{
+			binst.updateShape();
+			if(binst.inst.tilemap_exists)
+				binst.inst.physics_changed = false;  // won't play well with other physics behavior.
+			binst.last_width = binst.inst.width;
+			binst.last_height = binst.inst.height;
+			binst.last_anim = binst.inst.cur_animation;
+			binst.last_anim_frame = binst.inst.cur_frame;
+			binst.invalidateShape = false;
+			binst.updateStatic = false;
+		}
+		if(binst.updateStatic)
+		{
+			for(var i=0, len=binst.shapes.length; i<len; i++)
+				binst.space.reindexShape(binst.shapes[i]);
+			binst.updateStatic = false;
+		}
+	};
+	var eachBodyPrestep = function(body)
+	{
+		this.runtime.trigger(cr.behaviors.rojoChipmunkBeta.prototype.cnds.onPreStep, body.c2obj.inst);
+	}
+	behinstProto.tick = function ()
+	{
+		var timescale = this.runtime.timescale;
+		if (this.runtime.tickcount > this.behavior.lastUpdateTick && timescale > 0)
+		{
+				this.space.eachBody(eachBodyPrestep, this);
+				this.behavior.rogues.forEach(this.updateCOM);
+				this.space.eachBody(this.updateCOM);
+				this.behavior.rogues.forEach(this.changeShapeCheck);
+				this.space.bodies.forEach(this.changeShapeCheck);  //dosen't cover sleeping bodies
+				if (!this.space.stepping_mode)
+					this.space.step(this.space.fixed_step * timescale);
+				else
+					this.space.step(this.runtime.getDt(this.inst));
+				var delayedAddRemove = this.space.delayedAddRemove;
+				for(var i=0, len=delayedAddRemove.length/2; i<len; i++)
+					delayedAddRemove[2*i].call(this.space, delayedAddRemove[2*i+1]);
+				delayedAddRemove.length = 0;
+				this.space.eachBody(this.updateC2);
+				this.behavior.rogues.forEach(this.updateC2);  //rogues aren't moved by chipmunk.js, but this resets forces
+				this.behavior.lastUpdateTick = this.runtime.tickcount;
+		}
+	};
+	behinstProto.getJointHelper = function (tag)
+	{
+		var lastJoint = null;
+		var index=0;
+		if (typeof(tag)=="string")
+			this.body.eachConstraint(function(joint){if(joint.tag === tag)lastJoint=joint;});
+		else
+			this.body.eachConstraint(function(joint){if(tag==index)lastJoint=joint;index++;});
+		return lastJoint;
+	};
+	function parseLayersHelper (layers)
+	{
+		if( typeof(layers) == "string")
+		{
+			layers = parseInt(layers.slice(), 16);
+			if (isNaN(layers))
+			{
+				layers = ~0;
+			}
+		}
+		else
+			layers |= 0;
+		return layers;
+	}
+	function Cnds() {};
+	Cnds.prototype.isSleeping = function ()
+	{
+		return this.body.isSleeping();
+	};
+	Cnds.prototype.isDisabled = function ()
+	{
+		return !this.enabled;
+	};
+	Cnds.prototype.isImmovable = function ()
+	{
+		return this.immovable;
+	};
+	Cnds.prototype.isUnrotatable = function ()
+	{
+		return this.no_rotation;
+	};
+	Cnds.prototype.compareCollisionShape = function (col_shape)
+	{
+		return this.col_shape == col_shape;
+	};
+	Cnds.prototype.compareSteppingMode = function (mode)
+	{
+		return this.behavior.space.stepping_mode == mode;
+	};
+	Cnds.prototype.queryPoint = function (x,y)
+	{
+		var queryInfoBest;
+		var queryInfo;
+		for(var i = 0; i < this.shapes.length; i++)
+		{
+			queryInfo = this.shapes[i].nearestPointQuery(cp.v(x,y));
+			if(!queryInfoBest || queryInfo.d < queryInfoBest.d)
+				queryInfoBest = queryInfo;
+		}
+		if (queryInfoBest)
+		{
+			this.queryInfo = queryInfoBest;
+			return true;
+		}
+		return false;
+	};
+	Cnds.prototype.nearestQueryPoint = function (x, y, maxDistance, group, layers)
+	{
+		var type = this.runtime.getCurrentCondition().type;
+		var info = new cp.NearestPointQueryInfo(null, 0, 0);
+		var helperfunc = function(shape, d, p)
+		{
+			var inst = shape.body.c2obj.inst;
+			if( inst.type == type || type.is_family && type.members.indexOf(inst.type) != -1)
+			{
+				if(!info.shape || d < info.d)
+				{
+					info.shape = shape;
+					info.d = d;
+					info.p = p;
+				}
+			}
+		};
+		this.behavior.space.nearestPointQuery(cp.v(x,y), maxDistance, parseLayersHelper(layers), group, helperfunc);
+		if(!info.shape)
+			return false;
+		var binst = info.shape.body.c2obj;
+		binst.queryInfo = info;
+		var inst = binst.inst;
+        var sol = type.getCurrentSol();
+        sol.select_all = true;
+		sol.pick_one(inst);
+		type.applySolToContainer();
+		return true;
+	};
+	Cnds.prototype.querySegment = function (x1,y1,x2,y2)
+	{
+		var queryInfoBest;
+		var queryInfo;
+		var p1 = cp.v(x1,y1);
+		var p2 = cp.v(x2,y2);
+		for(var i = 0; i < this.shapes.length; i++)
+		{
+			queryInfo = this.shapes[i].segmentQuery (p1, p2);
+			if(queryInfo && (!queryInfoBest || queryInfo.t < queryInfoBest.t))
+				queryInfoBest = queryInfo;
+		}
+		if (queryInfoBest)
+		{
+			this.queryInfo = queryInfoBest;
+			this.queryInfo.p1 = p1;
+			this.queryInfo.p2 = p2;
+			return true;
+		}
+		return false;
+	};
+	Cnds.prototype.nearestQuerySegment = function (x1,y1,x2,y2, group, layers)
+	{
+		var type = this.runtime.getCurrentCondition().type;
+		var p1 = cp.v(x1,y1);
+		var p2 = cp.v(x2,y2);
+		var info = new cp.SegmentQueryInfo(null, 0, 0);
+		var helperfunc = function(shape, t, n)
+		{
+			var inst = shape.body.c2obj.inst;
+			if( inst.type == type || type.is_family && type.members.indexOf(inst.type) != -1)
+			{
+				if(!info.shape || t < info.t)
+				{
+					info.shape = shape;
+					info.t = t;
+					info.n = n;
+				}
+			}
+		};
+		this.behavior.space.segmentQuery (p1, p2, parseLayersHelper(layers), group, helperfunc);
+		if(!info.shape)
+			return false;
+		var binst = info.shape.body.c2obj;
+		binst.queryInfo = info;
+		info.p1 = p1;
+		info.p2 = p2;
+		var inst = binst.inst;
+        var sol = type.getCurrentSol();
+        sol.select_all = true;
+		sol.pick_one(inst);
+		type.applySolToContainer();
+		return true;
+	};
+	Cnds.prototype.onPreStep = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.onPostCollide = function ()
+	{
+		this.updateC2(this.body);
+		return true;
+	};
+	Cnds.prototype.onPreCollide = function ()
+	{
+		this.updateC2(this.body);
+		return true;
+	};
+	Cnds.prototype.forEachCollisionPair = function ()
+	{
+		var current_event = this.runtime.getCurrentEventStack().current_event;
+		this.body.eachArbiter(function(arb)
+		{
+			var binst = this.c2obj; // this is body
+			binst.Arbiter = arb;
+			binst.swapped = false;
+			var tmp = arb.swappedColl;
+			arb.swappedColl = false;
+			binst.swapped = (binst.inst.uid == arb.getB().body.c2obj.inst.uid);
+			arb.swappedColl = tmp;
+			binst.runtime.pushCopySol(current_event.solModifiers);
+			current_event.retrigger();
+			binst.runtime.popSol(current_event.solModifiers);
+			binst.Arbiter = null;
+		});
+		return false;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	behinstProto.getVector = function (vectype, x, y, body)
+	{
+		var vec;
+		switch(vectype)
+		{
+			case 0: //rect
+				vec = cp.v(x,y);
+				break;
+			case 1: //polar
+				x = cr.to_radians(x);
+				vec = cp.v(y*Math.cos(x), y*Math.sin(x));
+				break;
+			case 2: //layout
+				vec = body.world2Local(cp.v(x,y));
+				break;
+			case 3: //imagepoint
+				if (!body.c2obj) //-1 uid
+				{
+					vec = cp.v(0,0);
+					break;
+				}
+				var inst = body.c2obj.inst;
+				inst.update_bbox();
+				var imgpt = x;
+				if (!inst.getImagePoint || imgpt === -1) // -1 is COM
+				{
+					vec = cp.v(0,0);
+				}
+				else
+				{
+					x = inst.getImagePoint(imgpt, true);
+					y = inst.getImagePoint(imgpt, false);
+					vec = body.world2Local(cp.v(x,y));
+				}
+				break;
+		}
+		return vec;
+	};
+	Acts.prototype.setVelocity = function (vectype, x, y)
+	{
+		this.body.setVel(this.getVector(vectype, x, y));
+	};
+	Acts.prototype.setAngularVelocity = function (w)
+	{
+		this.body.setAngVel(cr.to_radians(w));
+	};
+	Acts.prototype.applyForceAt = function(fvectype, fx, fy, ovectype, ox, oy)
+	{
+		this.body.applyForce(this.getVector(fvectype, fx, fy), this.getVector(ovectype, ox, oy));
+		this.body.wasForceApplied = true;
+	};
+	Acts.prototype.applyImpulseAt = function(ivectype, ix, iy, ovectype, ox, oy)
+	{
+		this.body.applyImpulse(this.getVector(ivectype, ix, iy), this.getVector(ovectype, ox, oy));
+		this.body.wasForceApplied = true;
+	};
+	Acts.prototype.setTorque = function(t)
+	{
+		this.body.activate();
+		this.body.t = cr.to_radians(t);
+		this.body.wasForceApplied = true;
+	};
+	Acts.prototype.setMaxSpeed = function(speed)
+	{
+		this.body.v_limit = speed;
+	};
+	Acts.prototype.setMaxAngularSpeed = function(angSpeed)
+	{
+		this.body.w_limit = cr.to_radians(angSpeed);
+	};
+	Acts.prototype.setImmovable = function(yes)
+	{
+		var i, len;
+		if(yes==0 && this.immovable) // Disable
+		{
+			this.immovable = false;
+			if (this.enabled)
+			{
+				this.body.activateStatic();
+				for(i=0, len=this.shapes.length; i<len; i++)
+					this.space.removeShape(this.shapes[i]);
+				cr.arrayFindRemove(this.behavior.rogues, this.body);
+				this.body.setMass(this.mass);
+				if (!this.no_rotation)
+					this.body.setMoment(this.inertia);
+				this.body.nodeIdleTime = 0;
+				this.space.addBody(this.body);
+				for(i=0, len=this.shapes.length; i<len; i++)
+				{
+					this.space.addShape(this.shapes[i]);
+				}
+			}
+		}
+		else if(yes==1 && !this.immovable) //Enable
+		{
+			this.immovable = true;
+			if (this.enabled)
+			{
+				for(i=0, len=this.shapes.length; i<len; i++)
+					this.space.removeShape(this.shapes[i]);
+				this.space.removeBody(this.body);
+				this.body.setMass(Infinity);
+				this.body.setMoment(Infinity);
+				this.body.nodeIdleTime = Infinity;
+				this.behavior.rogues.push(this.body);
+				this.body.vx = 0;
+				this.body.vy = 0;
+				this.body.w = 0;
+				for(i=0, len=this.shapes.length; i<len; i++)
+				{
+					this.space.addShape(this.shapes[i]);
+				}
+			}
+		}
+	};
+	Acts.prototype.setNoRotation = function(yes)
+	{
+		if (this.inst.tilemap_exists)
+			return; //can't change with tilemap.
+		if (yes==0 && this.no_rotation)
+		{
+			this.no_rotation = false;
+			if (!this.immovable)
+				this.body.setMoment(this.inertia);
+		}
+		else if (yes==1 && !this.no_rotation)
+		{
+			this.no_rotation = true;
+			this.body.w=0;
+			this.body.setMoment(Infinity);
+		}
+	};
+	Acts.prototype.setCollisionShape = function(col_shape, radius)
+	{
+		if (this.col_shape == col_shape && col_shape == 4 && this.edgeRadius == radius)
+			return;
+		this.col_shape = col_shape;
+		this.edgeRadius = radius;
+		this.invalidateShape = true;
+	};
+	Acts.prototype.setCollisionGroup = function(group)
+	{
+		this.body.activate();
+		this.col_group = group;
+		for(var i = 0; i < this.shapes.length; i++)
+			this.shapes[i].group = group;
+	};
+	Acts.prototype.setCollisionLayers = function(layers)
+	{
+		this.body.activate();
+		layers = parseLayersHelper(layers);
+		this.col_layers = layers;
+		for(var i = 0; i < this.shapes.length; i++)
+			this.shapes[i].layers = layers;
+	};
+	Acts.prototype.setMass = function(mass)
+	{
+		this.mass = mass;
+		if( this.inst.tilemap_exists)
+		{
+			if (!this.immovable)
+				this.body.setMass(this.mass);
+			return;
+		}
+		var shape = this.shapes[0];
+		switch(this.col_shape)
+		{
+			case 0: //none
+				this.inertia = 1;
+				break;
+			case 1: //box
+				this.inertia = cp.momentForPoly(this.mass, shape.verts, cp.v(0,0));
+				break;
+			case 2: //circle
+				this.inertia = cp.momentForCircle(this.mass, shape.r, 0, cp.v(0,0));
+				break;
+			case 3: //poly
+				var temp_inertia = 0;
+				var percentage;
+				for(var i=0; i<this.shapes.length; ++i)
+				{
+					percentage = shapes[i].area/this.total_poly_area;
+					temp_inertia += cp.momentForPoly(percentage*this.mass, polys[i], this.offset);
+				}
+				this.inertia = temp_inertia;
+				break;
+			case 4: //segment
+				this.inertia = cp.momentForSegment(this.mass, shape.a, shape.b);
+				break;
+		}
+		if(this.inertia <= 0)
+			this.inertia = 1;
+		if (!this.immovable)
+		{
+			this.body.setMass(this.mass);
+			if(!this.no_rotation)
+				this.body.setMoment(this.inertia);
+		}
+	};
+	Acts.prototype.setFriction = function(u)
+	{
+		this.friction = u;
+		for(var i = 0; i < this.shapes.length; i++)
+			this.shapes[i].setFriction(u);
+	};
+	Acts.prototype.setElasticity = function(e)
+	{
+		this.elasticity = e;
+		for(var i = 0; i < this.shapes.length; i++)
+			this.shapes[i].setElasticity(e);
+	};
+	Acts.prototype.disablePhysics = function(yes)
+	{
+		if (!yes && this.enabled)
+		{
+			this.enabled = false;
+			if(this.immovable)
+				cr.arrayFindRemove(this.behavior.rogues, this.body);
+			else
+				this.space.removeBody(this.body);
+			for(var i = 0; i < this.shapes.length; i++)
+			{
+				this.space.removeShape(this.shapes[i]);
+			}
+		}
+		else if (yes && !this.enabled)
+		{
+			this.enabled = true;
+			if(this.immovable)
+				this.behavior.rogues.push(this.body);
+			else
+				this.space.addBody(this.body);
+			for(var i = 0; i < this.shapes.length; i++)
+				this.space.addShape(this.shapes[i]);
+		}
+	};
+	Acts.prototype.setGravity = function(vectype, x, y)
+	{
+		this.space.gravity = this.getVector(vectype, x, y);
+	};
+	Acts.prototype.setIterations = function(iterations)
+	{
+		this.space.iterations = iterations;
+	};
+	Acts.prototype.setDamping = function(damping)
+	{
+		this.space.damping = damping;
+	};
+	Acts.prototype.setSteppingMode = function(mode)
+	{
+		this.space.stepping_mode = mode;
+	};
+	Acts.prototype.setFixedTimestep = function(timestep)
+	{
+;
+		this.space.fixed_step = timestep;
+	};
+	Acts.prototype.setSleepTimeThreshold = function(threshold)
+	{
+		this.space.sleepTimeThreshold = threshold;
+	};
+	Acts.prototype.setIdleSpeedThreshold = function(threshold)
+	{
+		this.space.idleSpeedThreshold = threshold;
+	};
+	behinstProto.getBody2 = function(body1, uid) //helper
+	{
+		this.updateCOM(body1);
+		var body2;
+		if ( uid == -1)
+		{
+			body2 = this.space.staticBody;
+		}
+		else
+		{
+			var inst2 = this.runtime.getObjectByUID(uid);
+			if (!inst2)
+				return null;
+			body2 = inst2.chipmunkbetabody;
+			this.updateCOM(body2);
+		}
+		if (!body2 || body1 == body2)// || (body1.isRogue() && body2.isRogue()))
+			return null;
+		return body2;
+	};
+	Acts.prototype.addPinJoint = function (vectype1, x1, y1, obj2uid, vectype2, x2, y2, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var anchor1 = this.getVector(vectype1, x1, y1, this.body);
+		var anchor2 = this.getVector(vectype2, x2, y2, body2);
+		var joint = this.space.addConstraint(new cp.PinJoint(this.body, body2, anchor1, anchor2));
+		joint.typeName = "pin";
+		joint.tag = tag;
+	};
+	Acts.prototype.addPivotJoint = function (vectype1, x1, y1, obj2uid, vectype2, x2, y2, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var anchor1 = this.getVector(vectype1, x1, y1, this.body);
+		var anchor2 = this.getVector(vectype2, x2, y2, body2);
+		var joint = this.space.addConstraint(new cp.PivotJoint(this.body, body2, anchor1, anchor2));
+		joint.typeName = "pivot";
+		joint.tag = tag;
+	};
+	Acts.prototype.addPivotJointAtXY = function (obj2uid, x,y, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.PivotJoint(this.body, body2, cp.v(x,y)));
+		joint.typeName = "pivot";
+		joint.tag = tag;
+	};
+	Acts.prototype.addGrooveJoint = function(vectype1a, x1a, y1a, vectype1b, x1b, y1b, obj2uid, vectype2, x2, y2, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var grooveA = this.getVector(vectype1a, x1a, y1a, this.body);
+		var grooveB = this.getVector(vectype1b, x1b, y1b, this.body);
+		var anchor2 = this.getVector(vectype2, x2, y2, body2);
+		var joint = this.space.addConstraint(new cp.GrooveJoint(this.body, body2, grooveA, grooveB, anchor2));
+		joint.typeName = "groove";
+		joint.tag = tag;
+	};
+	Acts.prototype.addSlideJoint = function(vectype1, x1, y1, obj2uid, vectype2, x2, y2, low, high, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var anchor1 = this.getVector(vectype1, x1, y1, this.body);
+		var anchor2 = this.getVector(vectype2, x2, y2, body2);
+		var joint = this.space.addConstraint(new cp.SlideJoint(this.body, body2, anchor1, anchor2, low, high));
+		joint.typeName = "slide";
+		joint.tag = tag;
+	};
+	Acts.prototype.addDampedSpring = function(vectype1, x1, y1, obj2uid, vectype2, x2, y2, rest, stiffness, damping, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var anchor1 = this.getVector(vectype1, x1, y1, this.body);
+		var anchor2 = this.getVector(vectype2, x2, y2, body2);
+		var joint = this.space.addConstraint(new cp.DampedSpring(this.body, body2, anchor1, anchor2, rest, stiffness, damping));
+		joint.typeName = "spring";
+		joint.tag = tag;
+	};
+	Acts.prototype.addDampedRotarySpring = function(obj2uid, rest, stiffness, damping, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.DampedRotarySpring(this.body, body2, cr.to_radians(rest), stiffness, damping));
+		joint.typeName = "rotarySpring";
+		joint.tag = tag;
+	};
+	Acts.prototype.addRatchetJoint = function(obj2uid, phase, ratchet, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.RatchetJoint(this.body, body2, cr.to_radians(phase), cr.to_radians(ratchet)));
+		joint.typeName = "ratchet";
+		joint.tag = tag;
+	};
+	Acts.prototype.addGearJoint = function(obj2uid, phase, ratio, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.GearJoint(this.body, body2, cr.to_radians(phase), ratio));
+		joint.typeName = "gear";
+		joint.tag = tag;
+	};
+	Acts.prototype.addRotaryLimitJoint = function(obj2uid, low, high, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.RotaryLimitJoint(this.body, body2, cr.to_radians(low), cr.to_radians(high)));
+		joint.typeName = "rotaryLimit";
+		joint.tag = tag;
+	};
+	Acts.prototype.addSimpleMotor = function(obj2uid, rate, tag)
+	{
+		var body2 = this.getBody2(this.body, obj2uid);
+		if (!body2)
+			return;
+		var joint = this.space.addConstraint(new cp.SimpleMotor(this.body, body2, cr.to_radians(rate)));
+		joint.typeName = "motor";
+		joint.tag = tag;
+	};
+	Acts.prototype.destroyConnectedJoints = function ()
+	{
+		var self=this;
+		this.body.eachConstraint(function(joint){self.space.removeConstraint(joint);});
+	};
+	Acts.prototype.destroyJointAtTag = function (tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if (lastJoint)
+			this.space.removeConstraint(lastJoint);
+	};
+	Acts.prototype.setMaxJointForceAtTag = function (force, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if (lastJoint)
+			lastJoint.maxForce=force;
+	};
+	Acts.prototype.setJointProperty = function (property, value, tag)
+	{
+		var joint = this.getJointHelper(tag);
+		if (!joint)
+			return;
+		switch(property)
+		{
+			case 0:// Pin Dist
+				if (joint.typeName === "pin")
+					joint.dist = value;
+				break;
+			case 1:// Slide Min
+				if (joint.typeName === "slide")
+					joint.min = value;
+				break;
+			case 2:// Slide Max
+				if (joint.typeName === "slide")
+					joint.max = value;
+				break;
+			case 3:// Spring Rest
+				if (joint.typeName === "spring" )
+					joint.restLength = value;
+				else if (joint.typeName === "rotarySpring")
+					joint.restAngle = cr.to_radians(value);
+				break;
+			case 4:// Spring Stiff
+				if (joint.typeName === "spring"  || joint.typeName === "rotarySpring")
+					joint.stiffness = value;
+				break;
+			case 5:// Spring Damp
+				if (joint.typeName === "spring"  || joint.typeName === "rotarySpring")
+					joint.damping = value;
+				break;
+			case 6:// Rotary Limit Min
+				if (joint.typeName === "rotaryLimit")
+					joint.min = cr.to_radians(value);
+				break;
+			case 7: //Rotary Limit Max
+				if (joint.typeName === "rotaryLimit")
+					joint.max = cr.to_radians(value);
+				break;
+			case 8:// Ratchet Angle
+				if (joint.typeName === "ratchet")
+					joint.angle = cr.to_radians(value);
+				break;
+			case 9:// Ratchet Phase
+				if (joint.typeName === "ratchet")
+					joint.phase = cr.to_radians(value);
+				break;
+			case 10:// Ratchet Ratchet
+				if (joint.typeName === "ratchet")
+					joint.ratchet = cr.to_radians(value);
+				break;
+			case 11:// Gear Phase
+				if (joint.typeName === "gear")
+					joint.phase = cr.to_radians(value);
+				break;
+			case 12:// Gear Ratio
+				if (joint.typeName === "gear")
+					joint.ratio = value;
+				break;
+			case 13:// Motor Rate
+				if (joint.typeName === "motor")
+					joint.rate = cr.to_radians(value);
+				break;
+		}
+	};
+	Acts.prototype.sleepWake = function (wake)
+	{
+		if(!this.body.isRogue())
+		{
+			if(wake)
+				this.body.activate();
+			else
+				this.body.nodeIdleTime = Infinity;
+		}
+	};
+	Acts.prototype.ignoreCollision = function()
+	{
+		if(this.Arbiter)
+			this.Arbiter.ignore();
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.velocityX = function (ret)
+	{
+		ret.set_float(this.body.vx);
+	};
+	Exps.prototype.velocityY = function (ret)
+	{
+		ret.set_float(this.body.vy);
+	};
+	Exps.prototype.speed = function (ret)
+	{
+		var vx = this.body.vx;
+		var vy = this.body.vy;
+		ret.set_float(Math.sqrt(vx*vx + vy*vy));
+	};
+	Exps.prototype.angleOfMotion = function (ret)
+	{
+		ret.set_float(cr.to_degrees(Math.atan2(this.body.vy, this.body.vx)));
+	};
+	Exps.prototype.angVel = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.body.getAngVel()));
+	};
+	Exps.prototype.torque = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.body.t));
+	};
+	Exps.prototype.forceX = function (ret)
+	{
+		ret.set_float(this.body.f.x);
+	};
+	Exps.prototype.forceY = function (ret)
+	{
+		ret.set_float(this.body.f.y);
+	};
+	Exps.prototype.maxSpeed = function (ret)
+	{
+		ret.set_float(this.body.v_limit);
+	};
+	Exps.prototype.maxAngSpeed = function (ret)
+	{
+		ret.set_float(cr.to_degrees(this.body.w_limit));
+	};
+	Exps.prototype.group = function (ret)
+	{
+		ret.set_int(this.col_group);
+	};
+	Exps.prototype.layers = function (ret)
+	{
+		ret.set_int(this.col_layers);
+	};
+	Exps.prototype.mass = function (ret)
+	{
+		if(this.immovable)
+			ret.set_float(Infinity);
+		else
+			ret.set_float(this.body.m);
+	};
+	Exps.prototype.inertia = function (ret)
+	{
+		if ( this.immovable || this.no_rotation)
+			ret.set_float(Infinity);
+		else
+			ret.set_float(this.body.i);
+	};
+	Exps.prototype.elasticity = function (ret)
+	{
+		ret.set_float(this.elasticity);
+	};
+	Exps.prototype.friction = function (ret)
+	{
+		ret.set_float(this.friction);
+	};
+	Exps.prototype.segmentRadius = function (ret)
+	{
+		ret.set_float(this.edgeRadius);
+	};
+	Exps.prototype.area = function (ret)
+	{
+		if( this.inst.tilemap_exists || this.col_shape === 3)
+		{
+			if(!this.total_poly_area)
+				for(var i=0; i<this.shapes.length; ++i)
+					this.total_poly_area += cp.areaForPoly(this.shapes[i].verts);
+			ret.set_float(this.total_poly_area);
+			return;
+		}
+		var area;
+		if(this.shapes.length == 0)
+		{
+			ret.set_float(0);
+			return; // shape not created yet
+		}
+		var shape = this.shapes[0];
+		switch(this.col_shape)
+		{
+			case 0: //none
+				area = 0;
+				break;
+			case 1: //box
+				area = cp.areaForPoly(shape.verts);
+				break;
+			case 3: //poly
+				area = this.total_poly_area;
+				break;
+			case 2: //circle
+				area = cp.areaForCircle(shape.r, 0);
+				break;
+			case 4: //segment
+				area = cp.areaForSegment(shape.a, shape.b, shape.r);
+				break;
+		}
+		ret.set_float(area);
+	};
+	Exps.prototype.CoMx = function (ret)
+	{
+		ret.set_float(this.body.getPos().x);
+	};
+	Exps.prototype.CoMy = function (ret)
+	{
+		ret.set_float(this.body.getPos().y);
+	};
+	Exps.prototype.SpaceIterations = function (ret)
+	{
+		ret.set_int(this.space.iterations);
+	};
+	Exps.prototype.SpaceDamping = function (ret)
+	{
+		ret.set_float(this.space.damping);
+	};
+	Exps.prototype.SpaceTimestep = function (ret)
+	{
+		if (!this.space.stepping_mode)
+			ret.set_float(this.space.fixed_step);
+		else
+			ret.set_float(this.runtime.getDt(this.inst));
+	};
+	Exps.prototype.sleepTimeThreshold = function (ret)
+	{
+		ret.set_float(this.space.sleepTimeThreshold);
+	};
+	Exps.prototype.idleSpeedThreshold = function (ret)
+	{
+		ret.set_float(this.space.idleSpeedThreshold);
+	};
+	Exps.prototype.gravityX = function (ret)
+	{
+		ret.set_float(this.space.gravity.x);
+	};
+	Exps.prototype.gravityY = function (ret)
+	{
+		ret.set_float(this.space.gravity.y);
+	};
+	Exps.prototype.queryX = function (ret)
+	{
+		if (this.queryInfo)
+		{
+			if (!this.queryInfo.p)
+			{
+				var p1 = this.queryInfo.p1;
+				var p2 = this.queryInfo.p2;
+				this.queryInfo.p = this.queryInfo.hitPoint(p1, p2);
+			}
+			ret.set_float(this.queryInfo.p.x);
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.queryY = function (ret)
+	{
+		if (this.queryInfo)
+		{
+			if (!this.queryInfo.p)
+			{
+				var p1 = this.queryInfo.p1;
+				var p2 = this.queryInfo.p2;
+				this.queryInfo.p = this.queryInfo.hitPoint(p1, p2);
+			}
+			ret.set_float(this.queryInfo.p.y);
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.queryDist = function (ret)
+	{
+		if (this.queryInfo)
+		{
+			if (!this.queryInfo.d)
+			{
+				var p1 = this.queryInfo.p1;
+				var p2 = this.queryInfo.p2;
+				this.queryInfo.d = this.queryInfo.hitDist(p1, p2);
+			}
+			ret.set_float(this.queryInfo.d);
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.queryT = function (ret)
+	{
+		if (this.queryInfo && this.queryInfo.t)
+			ret.set_float(this.queryInfo.t);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.queryNormX = function (ret)
+	{
+		if (this.queryInfo && this.queryInfo.n)
+			ret.set_float(this.queryInfo.n.x);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.queryNormY = function (ret)
+	{
+		if (this.queryInfo && this.queryInfo.n)
+			ret.set_float(this.queryInfo.n.y);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointCount = function (ret)
+	{
+		var count = 0;
+		this.body.eachConstraint(function(joint){++count;});
+		ret.set_int(count);
+	};
+	Exps.prototype.jointMaxForce = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint)
+			ret.set_float(lastJoint.maxForce);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointImpulse = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint)
+			ret.set_float(lastJoint.getImpulse());
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointOtherUID = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		var otherBody;
+		if(lastJoint)
+		{
+			if(lastJoint.a === this.body)
+				otherBody = lastJoint.b;
+			else
+				otherBody = lastJoint.a;
+			if (otherBody.c2obj == null)
+				ret.set_int(-1);
+			else
+				ret.set_int(otherBody.c2obj.inst.uid);
+		}
+		else
+			ret.set_int(-2);
+	};
+	Exps.prototype.jointType = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint)
+			ret.set_string(lastJoint.typeName);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.jointAnchorX = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.anchr2)
+		{
+			if( this.body === lastJoint.a && lastJoint.typeName != "groove")
+			{
+				this.updateCOM(lastJoint.a);
+				ret.set_float(lastJoint.a.local2World(lastJoint.anchr1).x);
+			}
+			else
+			{
+				if(lastJoint.b.c2obj)
+					this.updateCOM(lastJoint.b);
+				ret.set_float(lastJoint.b.local2World(lastJoint.anchr2).x);
+			}
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointAnchorY = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.anchr2)
+		{
+			if( this.body === lastJoint.a && lastJoint.typeName != "groove")
+			{
+				this.updateCOM(lastJoint.a);
+				ret.set_float(lastJoint.a.local2World(lastJoint.anchr1).y);
+			}
+			else
+			{
+				if(lastJoint.b.c2obj)
+					this.updateCOM(lastJoint.b);
+				ret.set_float(lastJoint.b.local2World(lastJoint.anchr2).y);
+			}
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointOtherAnchorX = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.anchr2)
+		{
+			if( this.body === lastJoint.b && lastJoint.typeName != "groove")
+			{
+				this.updateCOM(lastJoint.a);
+				ret.set_float(lastJoint.a.local2World(lastJoint.anchr1).x);
+			}
+			else
+			{
+				if(lastJoint.b.c2obj)
+					this.updateCOM(lastJoint.b);
+				ret.set_float(lastJoint.b.local2World(lastJoint.anchr2).x);
+			}
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.jointOtherAnchorY = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.anchr2)
+		{
+			if( this.body === lastJoint.b && lastJoint.typeName != "groove")
+			{
+				this.updateCOM(lastJoint.a);
+				ret.set_float(lastJoint.a.local2World(lastJoint.anchr1).y);
+			}
+			else // b
+			{
+				if(lastJoint.b.c2obj)
+					this.updateCOM(lastJoint.b);
+				ret.set_float(lastJoint.b.local2World(lastJoint.anchr2).y);
+			}
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_PinDist = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "pin")
+			ret.set_float(lastJoint.dist);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_SlideMin = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "slide")
+			ret.set_float(lastJoint.min);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_SlideMax = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "slide")
+			ret.set_float(lastJoint.max);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_SpringRest = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint)
+		{
+			if( lastJoint.typeName == "spring")
+				ret.set_float(lastJoint.restLength);
+			else if( lastJoint.typeName == "rotarySpring")
+				ret.set_float(cr.to_degrees(lastJoint.restAngle));
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_SpringStiff = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && ( lastJoint.typeName == "spring" || lastJoint.typeName == "rotarySpring"))
+			ret.set_float(lastJoint.stiffness);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_SpringDamp = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && ( lastJoint.typeName == "spring" || lastJoint.typeName == "rotarySpring"))
+			ret.set_float(lastJoint.damping);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_RotaryLimitMin = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "rotaryLimit")
+			ret.set_float(cr.to_degrees(lastJoint.min));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_RotaryLimitMax = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "rotaryLimit")
+			ret.set_float(cr.to_degrees(lastJoint.max));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_RatchetAngle = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "ratchet")
+			ret.set_float(cr.to_degrees(lastJoint.angle));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_RatchetPhase = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "ratchet")
+			ret.set_float(cr.to_degrees(lastJoint.phase));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_RatchetRatchet = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "ratchet")
+			ret.set_float(cr.to_degrees(lastJoint.ratchet));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_GearPhase = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "gear")
+			ret.set_float(cr.to_degrees(lastJoint.phase));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_GearRatio = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "gear")
+			ret.set_float(lastJoint.ratio);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.joint_MotorRate = function (ret, tag)
+	{
+		var lastJoint = this.getJointHelper(tag);
+		if(lastJoint && lastJoint.typeName == "motor")
+			ret.set_float(cr.to_degrees(lastJoint.rate));
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.CollisionImpactX = function (ret)
+	{
+		if (this.Arbiter)
+		{
+			var tmp = this.Arbiter.swappedColl ;
+			this.Arbiter.swappedColl = this.swapped;
+			ret.set_float(this.Arbiter.totalImpulseWithFriction().x);
+			this.Arbiter.swappedColl = tmp;
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.CollisionImpactY = function (ret)
+	{
+		if (this.Arbiter)
+		{
+			var tmp = this.Arbiter.swappedColl ;
+			this.Arbiter.swappedColl = this.swapped;
+			ret.set_float(this.Arbiter.totalImpulseWithFriction().y);
+			this.Arbiter.swappedColl = tmp;
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.CollisionKE = function (ret)
+	{
+		if (this.Arbiter)
+			ret.set_float(this.Arbiter.totalKE());
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.CollisionOtherObj = function (ret)
+	{
+		if (this.Arbiter)
+		{
+			var tmp = this.Arbiter.swappedColl ;
+			this.Arbiter.swappedColl = this.swapped;
+			ret.set_float(this.Arbiter.getB().body.c2obj.inst.uid);
+			this.Arbiter.swappedColl = tmp;
+		}
+		else
+			ret.set_float(-1);
+	};
+	Exps.prototype.ContactCount = function (ret)
+	{
+		if (this.Arbiter)
+			ret.set_float(this.Arbiter.contacts.length);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.ContactPointX = function (ret, index)
+	{
+		if (this.Arbiter && index>=0 && index<this.Arbiter.contacts.length)
+			ret.set_float(this.Arbiter.getPoint(index).x);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.ContactPointY = function (ret, index)
+	{
+		if (this.Arbiter && index>=0 && index<this.Arbiter.contacts.length)
+			ret.set_float(this.Arbiter.getPoint(index).y);
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.ContactNormX = function (ret, index)
+	{
+		if (this.Arbiter && index>=0 && index<this.Arbiter.contacts.length)
+		{
+			var tmp = this.Arbiter.swappedColl ;
+			this.Arbiter.swappedColl = this.swapped;
+			ret.set_float(this.Arbiter.getNormal(index).x);
+			this.Arbiter.swappedColl = tmp;
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.ContactNormY = function (ret, index)
+	{
+		if (this.Arbiter && index>=0 && index<this.Arbiter.contacts.length)
+		{
+			var tmp = this.Arbiter.swappedColl ;
+			this.Arbiter.swappedColl = this.swapped;
+			ret.set_float(this.Arbiter.getNormal(index).y);
+			this.Arbiter.swappedColl = tmp;
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.ContactDepth = function (ret, index)
+	{
+		if (this.Arbiter && index>=0 && index<this.Arbiter.contacts.length)
+		{
+			ret.set_float(this.Arbiter.getDepth(index));
+		}
+		else
+			ret.set_float(0);
+	};
+	Exps.prototype.world2LocalX = function (ret, x, y)
+	{
+		ret.set_float(this.body.world2Local(cp.v(x,y)).x);
+	};
+	Exps.prototype.world2LocalY = function (ret, x, y)
+	{
+		ret.set_float(this.body.world2Local(cp.v(x,y)).y);
+	};
+	Exps.prototype.local2WorldX = function (ret, x, y)
+	{
+		ret.set_float(this.body.local2World(cp.v(x,y)).x);
+	};
+	Exps.prototype.local2WorldY = function (ret, x, y)
+	{
+		ret.set_float(this.body.local2World(cp.v(x,y)).y);
+	};
+	behaviorProto.exps = new Exps();
+}());
+;
+;
+cr.behaviors.solid = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var behaviorProto = cr.behaviors.solid.prototype;
+	behaviorProto.Type = function(behavior, objtype)
+	{
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
+	};
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
+	{
+	};
+	behaviorProto.Instance = function(type, inst)
+	{
+		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
+		this.runtime = type.runtime;
+	};
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
+	{
+		this.inst.extra["solidEnabled"] = (this.properties[0] !== 0);
+	};
+	behinstProto.tick = function ()
+	{
+	};
+	function Cnds() {};
+	Cnds.prototype.IsEnabled = function ()
+	{
+		return this.inst.extra["solidEnabled"];
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetEnabled = function (e)
+	{
+		this.inst.extra["solidEnabled"] = !!e;
+	};
+	behaviorProto.acts = new Acts();
+}());
+cr.getObjectRefTable = function () { return [
+	cr.plugins_.Audio,
+	cr.plugins_.Arr,
+	cr.plugins_.Browser,
+	cr.plugins_.hmmg_layoutTransition_v2,
+	cr.plugins_.Function,
+	cr.plugins_.Spritefont2,
+	cr.plugins_.LocalStorage,
+	cr.plugins_.Sprite,
+	cr.plugins_.IDNet,
+	cr.plugins_.Keyboard,
+	cr.plugins_.Text,
+	cr.plugins_.TextBox,
+	cr.plugins_.TiledBg,
+	cr.plugins_.Mouse,
+	cr.plugins_.Touch,
+	cr.plugins_.Particles,
+	cr.plugins_.SpriteFontPlus,
+	cr.behaviors.lunarray_LiteTween,
+	cr.behaviors.Pin,
+	cr.behaviors.Sin,
+	cr.behaviors.Rotate,
+	cr.behaviors.Platform,
+	cr.behaviors.Car,
+	cr.behaviors.Bullet,
+	cr.behaviors.rojoChipmunkBeta,
+	cr.behaviors.Fade,
+	cr.behaviors.solid,
+	cr.behaviors.Timer,
+	cr.plugins_.Function.prototype.cnds.OnFunction,
+	cr.plugins_.hmmg_layoutTransition_v2.prototype.acts.startTransition,
+	cr.system_object.prototype.acts.GoToLayoutByName,
+	cr.plugins_.Function.prototype.exps.Param,
+	cr.plugins_.hmmg_layoutTransition_v2.prototype.acts.prepareTransition,
+	cr.system_object.prototype.acts.SetVar,
+	cr.system_object.prototype.exps.floor,
+	cr.system_object.prototype.exps.right,
+	cr.plugins_.Function.prototype.acts.SetReturnValue,
+	cr.system_object.prototype.cnds.Every,
+	cr.plugins_.Function.prototype.acts.CallFunction,
+	cr.plugins_.Arr.prototype.exps.At,
+	cr.system_object.prototype.cnds.Compare,
+	cr.system_object.prototype.exps.layoutname,
+	cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+	cr.system_object.prototype.exps.abs,
+	cr.plugins_.Sprite.prototype.exps.X,
+	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+	cr.system_object.prototype.cnds.IsGroupActive,
+	cr.system_object.prototype.cnds.OnLayoutStart,
+	cr.plugins_.IDNet.prototype.cnds.isAuthorized,
+	cr.plugins_.IDNet.prototype.acts.Inititalize,
+	cr.plugins_.IDNet.prototype.cnds.UserIsAuthorized,
+	cr.plugins_.Spritefont2.prototype.cnds.PickByUID,
+	cr.plugins_.Spritefont2.prototype.acts.SetText,
+	cr.plugins_.IDNet.prototype.exps.UserName,
+	cr.plugins_.Spritefont2.prototype.acts.SetVisible,
+	cr.plugins_.Sprite.prototype.acts.SetAnim,
+	cr.plugins_.IDNet.prototype.acts.ShowLeaderBoard,
+	cr.plugins_.IDNet.prototype.acts.ShowAchievements,
+	cr.plugins_.IDNet.prototype.acts.LoginPopup,
+	cr.plugins_.IDNet.prototype.acts.SubmitScore,
+	cr.plugins_.IDNet.prototype.cnds.menuVisible,
+	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
+	cr.system_object.prototype.cnds.LayerVisible,
+	cr.plugins_.Sprite.prototype.exps.LayerName,
+	cr.plugins_.IDNet.prototype.cnds.blacklisted,
+	cr.system_object.prototype.acts.GoToLayout,
+	cr.plugins_.IDNet.prototype.cnds.sponsored,
+	cr.plugins_.Sprite.prototype.acts.Destroy,
+	cr.plugins_.IDNet.prototype.cnds.UserIsNotAuthorized,
+	cr.system_object.prototype.cnds.Else,
+	cr.plugins_.Audio.prototype.acts.Play,
+	cr.system_object.prototype.acts.SetLayerVisible,
+	cr.system_object.prototype.cnds.CompareVar,
+	cr.system_object.prototype.exps["int"],
+	cr.system_object.prototype.exps.random,
+	cr.plugins_.Sprite.prototype.acts.SetEffectParam,
+	cr.plugins_.Sprite.prototype.cnds.OnCreated,
+	cr.system_object.prototype.acts.CreateObject,
+	cr.plugins_.Sprite.prototype.exps.Y,
+	cr.plugins_.Sprite.prototype.exps.UID,
+	cr.plugins_.SpriteFontPlus.prototype.exps.UID,
+	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.SetVisible,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetText,
+	cr.plugins_.Sprite.prototype.cnds.IsOnLayer,
+	cr.system_object.prototype.cnds.ForEach,
+	cr.plugins_.SpriteFontPlus.prototype.cnds.PickByUID,
+	cr.plugins_.Function.prototype.exps.ReturnValue,
+	cr.system_object.prototype.exps.str,
+	cr.plugins_.Sprite.prototype.cnds.PickByUID,
+	cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
+	cr.system_object.prototype.acts.Wait,
+	cr.plugins_.SpriteFontPlus.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.SpriteFontPlus.prototype.cnds.OnCreated,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetPos,
+	cr.plugins_.SpriteFontPlus.prototype.exps.X,
+	cr.plugins_.SpriteFontPlus.prototype.exps.Y,
+	cr.plugins_.Mouse.prototype.cnds.IsOverObject,
+	cr.plugins_.Mouse.prototype.acts.SetCursor,
+	cr.plugins_.Browser.prototype.acts.GoToURLWindow,
+	cr.plugins_.Browser.prototype.exps.Domain,
+	cr.plugins_.Sprite.prototype.acts.SetEffectEnabled,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.SetTarget,
+	cr.plugins_.Sprite.prototype.exps.ImageWidth,
+	cr.plugins_.Sprite.prototype.exps.ImageHeight,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.Start,
+	cr.plugins_.Mouse.prototype.cnds.OnObjectClicked,
+	cr.plugins_.Sprite.prototype.acts.SetAnimSpeed,
+	cr.plugins_.Keyboard.prototype.cnds.OnKey,
+	cr.system_object.prototype.acts.SetTimescale,
+	cr.system_object.prototype.cnds.Repeat,
+	cr.system_object.prototype.exps.loopindex,
+	cr.system_object.prototype.acts.SetObjectTimescale,
+	cr.system_object.prototype.acts.RestoreObjectTimescale,
+	cr.plugins_.Sprite.prototype.cnds.CompareX,
+	cr.plugins_.Sprite.prototype.acts.SetWidth,
+	cr.plugins_.Sprite.prototype.acts.SetHeight,
+	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
+	cr.plugins_.Sprite.prototype.acts.ToggleBoolInstanceVar,
+	cr.system_object.prototype.acts.SetFullscreenQuality,
+	cr.plugins_.Sprite.prototype.acts.SetBoolInstanceVar,
+	cr.system_object.prototype.cnds.OnCanvasSnapshot,
+	cr.plugins_.Arr.prototype.acts.SetXY,
+	cr.plugins_.Arr.prototype.cnds.CompareXY,
+	cr.plugins_.IDNet.prototype.acts.AchievementSave,
+	cr.plugins_.Sprite.prototype.acts.SetAngle,
+	cr.behaviors.Pin.prototype.acts.Pin,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetSize,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetScale,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetAngle,
+	cr.plugins_.Text.prototype.cnds.PickByUID,
+	cr.plugins_.Text.prototype.acts.Destroy,
+	cr.system_object.prototype.exps.tokenat,
+	cr.plugins_.Function.prototype.cnds.CompareParam,
+	cr.plugins_.Arr.prototype.cnds.CompareX,
+	cr.system_object.prototype.acts.AddVar,
+	cr.plugins_.Audio.prototype.acts.SetPlaybackRate,
+	cr.plugins_.Sprite.prototype.acts.SetPosToObject,
+	cr.plugins_.Sprite.prototype.acts.ZMoveToObject,
+	cr.plugins_.TiledBg.prototype.acts.SetEffectEnabled,
+	cr.system_object.prototype.cnds.EveryTick,
+	cr.system_object.prototype.exps.dt,
+	cr.behaviors.Platform.prototype.exps.VectorX,
+	cr.behaviors.Platform.prototype.exps.VectorY,
+	cr.plugins_.Sprite.prototype.cnds.CompareFrame,
+	cr.system_object.prototype.cnds.TriggerOnce,
+	cr.plugins_.Audio.prototype.acts.PlayAtObject,
+	cr.plugins_.Sprite.prototype.cnds.IsOverlappingOffset,
+	cr.behaviors.Platform.prototype.acts.SetDeceleration,
+	cr.plugins_.TiledBg.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
+	cr.plugins_.Particles.prototype.acts.SetAngle,
+	cr.plugins_.Text.prototype.acts.SetText,
+	cr.plugins_.Sprite.prototype.exps.Angle,
+	cr.plugins_.Sprite.prototype.cnds.CompareY,
+	cr.system_object.prototype.exps.layoutheight,
+	cr.system_object.prototype.exps.layoutwidth,
+	cr.plugins_.Sprite.prototype.acts.SetX,
+	cr.plugins_.Keyboard.prototype.cnds.OnKeyCode,
+	cr.plugins_.Keyboard.prototype.cnds.IsKeyCodeDown,
+	cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
+	cr.plugins_.Sprite.prototype.cnds.IsOverlapping,
+	cr.plugins_.Touch.prototype.exps.TouchID,
+	cr.plugins_.Keyboard.prototype.cnds.OnKeyCodeReleased,
+	cr.plugins_.Touch.prototype.cnds.OnNthTouchEnd,
+	cr.behaviors.Car.prototype.acts.SimulateControl,
+	cr.behaviors.Car.prototype.acts.SetMaxSpeed,
+	cr.behaviors.Car.prototype.acts.SetSteerSpeed,
+	cr.behaviors.Platform.prototype.acts.SetVectorY,
+	cr.system_object.prototype.exps.timescale,
+	cr.plugins_.Audio.prototype.acts.PlayAtObjectByName,
+	cr.system_object.prototype.exps.round,
+	cr.behaviors.Platform.prototype.acts.SetVectorX,
+	cr.behaviors.Platform.prototype.acts.SetEnabled,
+	cr.system_object.prototype.exps.sin,
+	cr.system_object.prototype.exps.cos,
+	cr.behaviors.Pin.prototype.acts.Unpin,
+	cr.plugins_.Sprite.prototype.acts.SetY,
+	cr.behaviors.Platform.prototype.acts.SimulateControl,
+	cr.behaviors.Platform.prototype.acts.SetMaxSpeed,
+	cr.plugins_.Sprite.prototype.acts.SetMirrored,
+	cr.plugins_.Sprite.prototype.cnds.OnAnimFinished,
+	cr.behaviors.Car.prototype.cnds.CompareSpeed,
+	cr.plugins_.Particles.prototype.acts.SetPosToObject,
+	cr.plugins_.Particles.prototype.acts.ZMoveToObject,
+	cr.plugins_.Particles.prototype.acts.SetSpraying,
+	cr.plugins_.Audio.prototype.acts.Stop,
+	cr.plugins_.Sprite.prototype.cnds.OnCollision,
+	cr.plugins_.TiledBg.prototype.acts.SetEffectParam,
+	cr.behaviors.solid.prototype.acts.SetEnabled,
+	cr.system_object.prototype.exps.originalwindowwidth,
+	cr.system_object.prototype.exps.originalwindowheight,
+	cr.behaviors.Fade.prototype.acts.StartFade,
+	cr.plugins_.TiledBg.prototype.exps.Y,
+	cr.plugins_.TiledBg.prototype.exps.Height,
+	cr.plugins_.TiledBg.prototype.exps.X,
+	cr.plugins_.TiledBg.prototype.exps.Width,
+	cr.behaviors.Car.prototype.acts.SetEnabled,
+	cr.behaviors.Car.prototype.acts.SetSpeed,
+	cr.plugins_.TiledBg.prototype.exps.UID,
+	cr.plugins_.TiledBg.prototype.cnds.PickByUID,
+	cr.behaviors.Rotate.prototype.acts.SetSpeed,
+	cr.plugins_.Sprite.prototype.cnds.AngleWithin,
+	cr.behaviors.Sin.prototype.acts.SetActive,
+	cr.behaviors.Sin.prototype.acts.SetMagnitude,
+	cr.plugins_.Sprite.prototype.acts.SetPos,
+	cr.plugins_.Sprite.prototype.acts.Spawn,
+	cr.behaviors.Car.prototype.acts.Stop,
+	cr.system_object.prototype.acts.RestartLayout,
+	cr.behaviors.Platform.prototype.cnds.IsMoving,
+	cr.system_object.prototype.exps.distance,
+	cr.system_object.prototype.exps.lerp,
+	cr.plugins_.Sprite.prototype.exps.AnimationName,
+	cr.plugins_.Sprite.prototype.exps.AnimationFrame,
+	cr.plugins_.Sprite.prototype.exps.Width,
+	cr.plugins_.Sprite.prototype.acts.SetOpacity,
+	cr.system_object.prototype.cnds.IsMobile,
+	cr.system_object.prototype.acts.SetLayerScale,
+	cr.system_object.prototype.acts.Scroll,
+	cr.plugins_.Sprite.prototype.exps.Count,
+	cr.system_object.prototype.exps.sqrt,
+	cr.plugins_.Keyboard.prototype.cnds.IsKeyDown,
+	cr.system_object.prototype.exps.replace,
+	cr.plugins_.SpriteFontPlus.prototype.acts.SetWidth,
+	cr.plugins_.Sprite.prototype.acts.MoveToBottom,
+	cr.plugins_.Touch.prototype.cnds.OnTapGestureObject,
+	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
+	cr.plugins_.Particles.prototype.acts.SetXRandomiser,
+	cr.plugins_.Particles.prototype.acts.SetYRandomiser,
+	cr.plugins_.TiledBg.prototype.cnds.OnCreated,
+	cr.plugins_.TiledBg.prototype.acts.SetInstanceVar,
+	cr.plugins_.Sprite.prototype.cnds.OnAnyAnimFinished,
+	cr.plugins_.TiledBg.prototype.cnds.IsClockwiseFrom,
+	cr.plugins_.TiledBg.prototype.cnds.IsBoolInstanceVarSet,
+	cr.plugins_.TiledBg.prototype.exps.LayerName,
+	cr.plugins_.Sprite.prototype.cnds.IsClockwiseFrom,
+	cr.plugins_.Sprite.prototype.exps.BBoxLeft,
+	cr.plugins_.Sprite.prototype.exps.BBoxTop,
+	cr.plugins_.Sprite.prototype.exps.BBoxRight,
+	cr.plugins_.Sprite.prototype.acts.StartAnim,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.Stop,
+	cr.plugins_.Sprite.prototype.acts.SetCollisions,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.SetTweenedProperty,
+	cr.behaviors.lunarray_LiteTween.prototype.cnds.IsActive,
+	cr.plugins_.Sprite.prototype.cnds.IsCollisionEnabled,
+	cr.plugins_.TiledBg.prototype.acts.SetPos,
+	cr.plugins_.TiledBg.prototype.acts.SetOpacity,
+	cr.behaviors.Bullet.prototype.acts.SetAngleOfMotion,
+	cr.plugins_.Sprite.prototype.cnds.OnDestroyed,
+	cr.behaviors.rojoChipmunkBeta.prototype.acts.applyImpulseAt,
+	cr.behaviors.rojoChipmunkBeta.prototype.acts.setAngularVelocity,
+	cr.behaviors.Timer.prototype.acts.StartTimer,
+	cr.plugins_.Sprite.prototype.exps.ImagePointX,
+	cr.plugins_.Sprite.prototype.exps.ImagePointY,
+	cr.behaviors.lunarray_LiteTween.prototype.acts.SetDuration,
+	cr.behaviors.Timer.prototype.cnds.OnTimer,
+	cr.behaviors.Bullet.prototype.acts.SetSpeed,
+	cr.behaviors.Bullet.prototype.cnds.CompareSpeed,
+	cr.plugins_.LocalStorage.prototype.acts.SetItem,
+	cr.plugins_.Arr.prototype.exps.AsJSON,
+	cr.plugins_.IDNet.prototype.acts.OnlineSavesSave,
+	cr.plugins_.LocalStorage.prototype.acts.CheckItemExists,
+	cr.plugins_.Arr.prototype.acts.Clear,
+	cr.plugins_.IDNet.prototype.acts.OnlineSavesLoad,
+	cr.plugins_.LocalStorage.prototype.cnds.OnItemExists,
+	cr.plugins_.Arr.prototype.acts.JSONLoad,
+	cr.plugins_.LocalStorage.prototype.exps.ItemValue,
+	cr.plugins_.IDNet.prototype.cnds.dataReady,
+	cr.plugins_.IDNet.prototype.exps.GateOnlineSavesData,
+	cr.plugins_.TiledBg.prototype.acts.SetWidth,
+	cr.system_object.prototype.exps.clamp,
+	cr.system_object.prototype.exps.loadingprogress,
+	cr.system_object.prototype.cnds.OnLoadFinished,
+	cr.plugins_.Audio.prototype.cnds.IsTagPlaying,
+	cr.system_object.prototype.exps.left,
+	cr.plugins_.Audio.prototype.acts.SetMuted
+];};
