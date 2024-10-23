@@ -236,12 +236,40 @@ ArcadeHubItems.Games = [
         "url": "games/google-kitsune/index.html"
     },
     {
+        "name": "Hextris",
+        "url": "games/Hextris/index.html"
+    },
+    {
+        "name": "Paper.io 2",
+        "url": "games/paperio2/index.html"
+    },
+    {
         "name": "Pudding Monsters",
         "url": "games/pudding-monsters/index.html"
     },
     {
         "name": "Retro Bowl",
         "url": "games/retro bowl/index.html"
+    },
+    {
+        "name": "Run 3",
+        "url": "games/run 3/index.html"
+    },
+    {
+        "name": "Slope",
+        "url": "games/Slope/index.html"
+    },
+    {
+        "name": "Snowball.io",
+        "url": "games/snowball.io/index.html"
+    },
+    {
+        "name": "Stack",
+        "url": "games/Stack/index.html"
+    },
+    {
+        "name": "Stack Bump 3d",
+        "url": "games/stack bump 3d/index.html"
     },
     {
         "name": "Stick Duel Battle",
@@ -306,6 +334,10 @@ ArcadeHubItems.Games = [
     {
         "name": "Territorial.io",
         "url": "games/territorial.io/index.html"
+    },
+    {
+        "name": "Tetris",
+        "url": "games/tetris/index.html"
     },
     {
         "name": "Wordle",
