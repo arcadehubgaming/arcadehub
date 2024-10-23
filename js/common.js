@@ -223,8 +223,8 @@ var ArcadeHub = {
         
             snowflake.style.top = "-10px"; 
         
-            const target = document.getElementById("snowTarget");
-            const targetPosition = target.getBoundingClientRect().top + window.scrollY;
+            let target = document.getElementById("snowTarget");
+            let targetPosition = target.getBoundingClientRect().top + window.scrollY;
         
             let position = -10; 
             const fallSpeed = 6; 
